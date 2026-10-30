@@ -40,7 +40,11 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] **I. Multi-Tenancy**: All data entities scoped with `organization_id`; PostgreSQL RLS enforced; tenant context resolved strictly on server.
+- [ ] **II. Financial & Inventory Invariance**: Atomic multi-record DB transactions; traceable `stock_movements` ledger; historical price snapshotting; immutable completed sales.
+- [ ] **III. Type Safety & Validation**: Strict TypeScript; runtime Zod schemas on all boundaries (actions, routes, forms).
+- [ ] **IV. Security & RBAC**: Server-side permission verification; no exposed service-role keys; least privilege access.
+- [ ] **V. AI Guardrails**: AI outputs untrusted; zero autonomous financial/inventory writes; human approval required for operational actions.
 
 ## Project Structure
 

@@ -7,7 +7,10 @@
 #   e.g.: auto-commit.ps1 after_specify
 param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [string]$EventName
+    [string]$EventName,
+    [Parameter(Position = 1, Mandatory = $false)]
+    [string]$Message,
+    [switch]$Force
 )
 $ErrorActionPreference = 'Stop'
 
@@ -119,7 +122,7 @@ if (Test-Path $configFile) {
     exit 0
 }
 
-if (-not $enabled) {
+if (-not $enabled -and -not $Force) {
     exit 0
 }
 
@@ -144,8 +147,10 @@ if ($d1 -eq 0 -and $d2 -eq 0 -and -not $untracked) {
 $commandName = $EventName -replace '^after_', '' -replace '^before_', ''
 $phase = if ($EventName -match '^before_') { 'before' } else { 'after' }
 
-# Use custom message if configured, otherwise default
-if (-not $commitMsg) {
+# Use custom message if passed or configured, otherwise default
+if ($Message) {
+    $commitMsg = $Message
+} elseif (-not $commitMsg) {
     $commitMsg = "[Spec Kit] Auto-commit $phase $commandName"
 }
 
