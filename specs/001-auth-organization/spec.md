@@ -145,7 +145,7 @@ As an organization owner, I want to invite staff members to my organization by e
 ### Functional Requirements
 
 - **FR-001**: System MUST allow users to register an account using a unique email address, password, first name, and last name.
-- **FR-002**: System MUST enforce password complexity: minimum 8 characters, containing at least one uppercase letter, one lowercase letter, and one number.
+- **FR-002**: System MUST enforce password complexity: minimum 8 characters, containing at least one uppercase letter, one lowercase letter, one number, and at least one special character/symbol.
 - **FR-003**: System MUST provide an email verification flow upon registration, generating a secure verification link dispatched to the registrant's email.
 - **FR-004**: System MUST allow registered users to authenticate securely with their email and password, establishing an encrypted, HTTP-only session.
 - **FR-005**: System MUST provide a secure self-service password reset mechanism via email, utilizing time-limited, single-use cryptographic tokens.
@@ -165,6 +165,9 @@ As an organization owner, I want to invite staff members to my organization by e
 - **FR-019**: System MUST display an unauthenticated redirect to `/sign-in` for any unauthenticated request to protected routes, preserving the redirect target URL.
 - **FR-020**: System MUST strictly block unverified user accounts from creating, viewing, or accessing any organization workspace until email verification is successfully completed; unverified users attempting to access protected workspace routes MUST be presented with an email verification pending screen providing a resend verification link.
 - **FR-021**: System MUST automatically navigate multi-organization users upon sign-in to their most recently active organization workspace, while maintaining the organization switcher in the global navigation header for immediate switching.
+- **FR-022**: System MUST handle organization creation requests idempotently using client mutation tokens to prevent duplicate organizations on network retry or double-submission.
+- **FR-023**: System MUST prohibit direct hard deletion of organizations; store closure MUST follow an explicit, audited soft-closure lifecycle managed exclusively by the verified Owner.
+- **FR-024**: System MUST maintain an immutable, append-only audit log for critical organization lifecycle events (ownership transfers, member removals, organization closures, invitation revocations); audit entries MUST be created atomically within the operations they record and MUST NOT be directly modifiable by client applications.
 
 ---
 
@@ -186,6 +189,10 @@ As an organization owner, I want to invite staff members to my organization by e
   - Represents an invitation extended to an email address to join an organization.
   - Attributes: Unique identifier, organization identifier, target email address, assigned role, secure invitation token, inviter user identifier, status (`pending`, `accepted`, `declined`, `revoked`, `expired`), expiration timestamp, creation timestamp.
   - Relationships: Belongs to one Organization; created by one User.
+- **Organization Audit Event**:
+  - Represents an immutable record of a critical lifecycle event within an organization.
+  - Attributes: Unique identifier, organization identifier, actor user identifier, event type, structured metadata (JSONB), creation timestamp.
+  - Relationships: Belongs to one Organization; performed by one User. Append-only; not modifiable by clients.
 
 ---
 
