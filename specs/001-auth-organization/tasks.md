@@ -60,9 +60,9 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 - [X] T008 Implement database migration 02 for handle_new_user() trigger on auth.users syncing into public.profiles (depends on T007) in supabase/migrations/20261031000002_auth_triggers.sql
 - [X] T009 Implement database migration 03 for non-recursive security helper functions (is_email_verified, get_user_organization_ids, is_org_member) with locked search_path (depends on T007, T008) in supabase/migrations/20261031000003_security_helpers.sql
 - [X] T010 Implement database migration 04 for universal FORCE ROW LEVEL SECURITY and base RLS policies for profiles, organizations, organization_memberships, and organization_audit_events (depends on T009) in supabase/migrations/20261031000004_rls_policies.sql
-- [ ] T011 Verify sequential clean-database migration execution from empty database (supabase db reset) in supabase/migrations/
-- [ ] T012 [P] Create shared TypeScript types, database schema definitions, and action result interfaces in src/types/database.ts and src/types/auth.ts
-- [ ] T013 [P] Implement base UI component primitives (Button, Input, Form, Label, Card, Alert, DropdownMenu) in src/components/ui/
+- [X] T011 Verify sequential clean-database migration execution from empty database (supabase db reset) in supabase/migrations/
+- [X] T012 [P] Create shared TypeScript types, database schema definitions, and action result interfaces in src/types/database.ts and src/types/auth.ts
+- [X] T013 [P] Implement base UI component primitives (Button, Input, Form, Label, Card, Alert, DropdownMenu) in src/components/ui/
 
 **Checkpoint**: Foundation ready — database schema, RLS policies, Supabase SSR clients, and base primitives are established and verified against a clean Supabase database.
 
@@ -77,21 +77,21 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 ### Tests for User Story 1 ⚠️
 *(Note: Tests authored here; executed in T025 after implementation components exist)*
 
-- [ ] T014 [P] [US1] Author unit tests for registration and sign-in Zod validation schemas in tests/unit/validations/auth.test.ts
-- [ ] T015 [P] [US1] Author integration tests for handle_new_user() trigger and is_email_verified() security helper in tests/integration/auth-trigger.test.ts
+- [X] T014 [P] [US1] Author unit tests for registration and sign-in Zod validation schemas in tests/unit/validations/auth.test.ts
+- [X] T015 [P] [US1] Author integration tests for handle_new_user() trigger and is_email_verified() security helper in tests/integration/auth-trigger.test.ts
 
 ### Implementation for User Story 1
 
-- [ ] T016 [P] [US1] Define authentication Zod schemas (signUpSchema, signInSchema) with password symbol rules in src/lib/validations/auth.ts
-- [ ] T017 [US1] Implement server action signUpAction with anti-enumeration protection in src/actions/auth-actions.ts
-- [ ] T018 [US1] Implement server action signInAction with email verification gate and organization routing in src/actions/auth-actions.ts
-- [ ] T019 [US1] Implement server action signOutAction clearing session cookies in src/actions/auth-actions.ts
-- [ ] T020 [P] [US1] Implement PKCE Auth Callback route with open-redirect sanitization in src/app/api/auth/callback/route.ts
-- [ ] T021 [P] [US1] Implement Next.js session validation and route protection middleware for session refresh in src/middleware.ts
-- [ ] T022 [P] [US1] Build Registration page and form component with inline validation in src/app/(auth)/sign-up/page.tsx and src/components/auth/SignUpForm.tsx
-- [ ] T023 [P] [US1] Build Sign-In page and form component with credential error handling in src/app/(auth)/sign-in/page.tsx and src/components/auth/SignInForm.tsx
-- [ ] T024 [P] [US1] Build Email Verification pending screen with resend link in src/app/(auth)/verify-email/page.tsx and src/components/auth/VerifyEmailCard.tsx
-- [ ] T025 [US1] Execute unit, integration, and end-to-end browser tests for registration, verification, sign-in, and sign-out in tests/e2e/auth-flow.spec.ts
+- [X] T016 [P] [US1] Define authentication Zod schemas (signUpSchema, signInSchema) with password symbol rules in src/lib/validations/auth.ts
+- [X] T017 [US1] Implement server action signUpAction with anti-enumeration protection in src/actions/auth-actions.ts
+- [X] T018 [US1] Implement server action signInAction with email verification gate and organization routing in src/actions/auth-actions.ts
+- [X] T019 [US1] Implement server action signOutAction clearing session cookies in src/actions/auth-actions.ts
+- [X] T020 [P] [US1] Implement PKCE Auth Callback route with open-redirect sanitization in src/app/api/auth/callback/route.ts
+- [X] T021 [P] [US1] Implement Next.js session validation and route protection middleware for session refresh in src/middleware.ts
+- [X] T022 [P] [US1] Build Registration page and form component with inline validation in src/app/(auth)/sign-up/page.tsx and src/components/auth/SignUpForm.tsx
+- [X] T023 [P] [US1] Build Sign-In page and form component with credential error handling in src/app/(auth)/sign-in/page.tsx and src/components/auth/SignInForm.tsx
+- [X] T024 [P] [US1] Build Email Verification pending screen with resend link in src/app/(auth)/verify-email/page.tsx and src/components/auth/VerifyEmailCard.tsx
+- [X] T025 [US1] Execute unit, integration, and end-to-end browser tests for registration, verification, sign-in, and sign-out in tests/e2e/auth-flow.spec.ts
 
 **Checkpoint**: User Story 1 is fully functional and testable independently (MVP Milestone).
 

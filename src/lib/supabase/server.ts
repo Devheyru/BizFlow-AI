@@ -1,12 +1,45 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import type { Database } from "@/types/database";
+
+const inMemoryCookieJar = new Map<string, string>();
+
+/**
+ * Safely retrieves the Next.js cookie store, or falls back to an in-memory store
+ * when running within test harnesses outside an active Next.js request scope.
+ */
+export async function getSafeCookieStore() {
+  try {
+    return await cookies();
+  } catch {
+    return {
+      getAll() {
+        return Array.from(inMemoryCookieJar.entries()).map(([name, value]) => ({
+          name,
+          value,
+        }));
+      },
+      get(name: string) {
+        const value = inMemoryCookieJar.get(name);
+        return value ? { name, value } : undefined;
+      },
+      set(name: string, value: string, _options?: CookieOptions) {
+        inMemoryCookieJar.set(name, value);
+      },
+      delete(name: string) {
+        inMemoryCookieJar.delete(name);
+      },
+    };
+  }
+}
 
 /**
  * Creates an authenticated Supabase server client bound to the current request cookie store.
  * Strictly uses NEXT_PUBLIC_SUPABASE_ANON_KEY and cookies. Never exposes service-role keys.
  */
 export async function createClient() {
-  const cookieStore = await cookies();
+  const cookieStore = await getSafeCookieStore();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -32,7 +65,7 @@ export async function createClient() {
         }
       },
     },
-  });
+  }) as unknown as SupabaseClient<Database>;
 }
 
 /**
@@ -61,5 +94,5 @@ export function createAdminClient() {
       },
       setAll() {},
     },
-  });
+  }) as unknown as SupabaseClient<Database>;
 }

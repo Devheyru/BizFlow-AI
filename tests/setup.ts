@@ -19,3 +19,28 @@ if (fs.existsSync(envPath)) {
     }
   }
 }
+
+// Polyfill/stub BroadcastChannel in test environment to avoid Node 22 / JSDOM MessageEvent collision
+if (typeof globalThis.BroadcastChannel !== "undefined") {
+  class MockBroadcastChannel {
+    name: string;
+    onmessage = null;
+    onmessageerror = null;
+    constructor(name: string) {
+      this.name = name;
+    }
+    postMessage() {}
+    close() {}
+    addEventListener() {}
+    removeEventListener() {}
+    dispatchEvent() {
+      return true;
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.BroadcastChannel = MockBroadcastChannel as any;
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).BroadcastChannel = MockBroadcastChannel as any;
+  }
+}
