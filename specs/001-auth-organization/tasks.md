@@ -41,11 +41,11 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 
 **Purpose**: Project initialization, framework configuration, environment settings, local Supabase environment, and testing harness.
 
-- [ ] T001 Initialize Next.js 15+ App Router application with TypeScript and Tailwind CSS in package.json and tsconfig.json
-- [ ] T002 [P] Install core runtime and UI dependencies (@supabase/supabase-js, @supabase/ssr, zod, react-hook-form, @hookform/resolvers/zod, clsx, tailwind-merge, lucide-react) in package.json
-- [ ] T003 [P] Configure Vitest unit testing framework and Playwright e2e runner in vitest.config.ts and playwright.config.ts
-- [ ] T004 [P] Configure environment variable validation schema and template in src/lib/env.ts and .env.example
-- [ ] T005 Setup and verify local Supabase development and test environment via supabase start in supabase/config.toml
+- [X] T001 Initialize Next.js 15+ App Router application with TypeScript and Tailwind CSS in package.json and tsconfig.json
+- [X] T002 [P] Install core runtime and UI dependencies (@supabase/supabase-js, @supabase/ssr, zod, react-hook-form, @hookform/resolvers/zod, clsx, tailwind-merge, lucide-react) in package.json
+- [X] T003 [P] Configure Vitest unit testing framework and Playwright e2e runner in vitest.config.ts and playwright.config.ts
+- [X] T004 [P] Configure environment variable validation schema and template in src/lib/env.ts and .env.example
+- [X] T005 Setup and verify local Supabase development and test environment via supabase start in supabase/config.toml
 
 ---
 
@@ -55,11 +55,11 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 
 **⚠️ CRITICAL SEQUENTIAL ORDER**: Database migrations MUST execute in exact numeric order (`01` → `02` → `03` → `04`) to satisfy foreign keys, triggers, and policy dependencies. No user story implementation can begin until Phase 2 is complete.
 
-- [ ] T006 Create Supabase SSR client utilities for browser, server, and middleware contexts in src/lib/supabase/client.ts, src/lib/supabase/server.ts, and src/lib/supabase/middleware.ts
-- [ ] T007 Implement core database migration 01 for enums (app_role, membership_status) and base tables (profiles, organizations, organization_memberships, organization_audit_events) in supabase/migrations/20261031000001_auth_organization_schema.sql
-- [ ] T008 Implement database migration 02 for handle_new_user() trigger on auth.users syncing into public.profiles (depends on T007) in supabase/migrations/20261031000002_auth_triggers.sql
-- [ ] T009 Implement database migration 03 for non-recursive security helper functions (is_email_verified, get_user_organization_ids, is_org_member) with locked search_path (depends on T007, T008) in supabase/migrations/20261031000003_security_helpers.sql
-- [ ] T010 Implement database migration 04 for universal FORCE ROW LEVEL SECURITY and base RLS policies for profiles, organizations, organization_memberships, and organization_audit_events (depends on T009) in supabase/migrations/20261031000004_rls_policies.sql
+- [X] T006 Create Supabase SSR client utilities for browser, server, and middleware contexts in src/lib/supabase/client.ts, src/lib/supabase/server.ts, and src/lib/supabase/middleware.ts
+- [X] T007 Implement core database migration 01 for enums (app_role, membership_status) and base tables (profiles, organizations, organization_memberships, organization_audit_events) in supabase/migrations/20261031000001_auth_organization_schema.sql
+- [X] T008 Implement database migration 02 for handle_new_user() trigger on auth.users syncing into public.profiles (depends on T007) in supabase/migrations/20261031000002_auth_triggers.sql
+- [X] T009 Implement database migration 03 for non-recursive security helper functions (is_email_verified, get_user_organization_ids, is_org_member) with locked search_path (depends on T007, T008) in supabase/migrations/20261031000003_security_helpers.sql
+- [X] T010 Implement database migration 04 for universal FORCE ROW LEVEL SECURITY and base RLS policies for profiles, organizations, organization_memberships, and organization_audit_events (depends on T009) in supabase/migrations/20261031000004_rls_policies.sql
 - [ ] T011 Verify sequential clean-database migration execution from empty database (supabase db reset) in supabase/migrations/
 - [ ] T012 [P] Create shared TypeScript types, database schema definitions, and action result interfaces in src/types/database.ts and src/types/auth.ts
 - [ ] T013 [P] Implement base UI component primitives (Button, Input, Form, Label, Card, Alert, DropdownMenu) in src/components/ui/
