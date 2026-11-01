@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient, getSafeCookieStore } from "@/lib/supabase/server";
+import { sanitizeRedirectUrl } from "@/lib/auth/redirect";
 import {
   signUpSchema,
   signInSchema,
@@ -135,7 +136,8 @@ export async function signUpAction(
  * Authenticate user with email and password, enforcing email verification gating (FR-004).
  */
 export async function signInAction(
-  rawInput: SignInInput
+  rawInput: SignInInput,
+  redirectTo?: string | null
 ): Promise<ActionResult<SignInResult>> {
   const parseResult = signInSchema.safeParse(rawInput);
   if (!parseResult.success) {
@@ -261,7 +263,7 @@ export async function signInAction(
       hasActiveOrganization: true,
       activeOrganizationId: chosenOrg.id,
       activeOrgSlug: chosenOrg.slug,
-      redirectUrl: `/${chosenOrg.slug}/dashboard`,
+      redirectUrl: redirectTo ? sanitizeRedirectUrl(redirectTo, `/${chosenOrg.slug}/dashboard`) : `/${chosenOrg.slug}/dashboard`,
     },
   };
 }

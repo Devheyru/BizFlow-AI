@@ -26,6 +26,7 @@ export function SignInForm() {
   const searchParams = useSearchParams();
   const callbackError = searchParams.get("error");
   const resetSuccess = searchParams.get("reset") === "success";
+  const nextParam = searchParams.get("next");
 
   const [serverError, setServerError] = useState<string | null>(
     callbackError === "auth_callback_failed"
@@ -51,7 +52,7 @@ export function SignInForm() {
     setIsPending(true);
 
     try {
-      const result = await signInAction(data);
+      const result = await signInAction(data, nextParam);
       if (!result.success) {
         setServerError(result.error.message);
         setIsPending(false);
