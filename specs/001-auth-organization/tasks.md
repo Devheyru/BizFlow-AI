@@ -1,4 +1,4 @@
-﻿# Tasks: Authentication and Organization Foundation
+# Tasks: Authentication and Organization Foundation
 
 **Feature**: `001-auth-organization` | **Input**: Design documents from `specs/001-auth-organization/`  
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)  
@@ -155,16 +155,16 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 ### Tests for User Story 4 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T047 after actions and switcher exist)*
 
-- [ ] T041 [P] [US4] Author unit tests for organization switching Zod schema in tests/unit/validations/organization-switch.test.ts
-- [ ] T042 [P] [US4] Author integration tests verifying get_user_organization_ids() returns all active tenant IDs for multi-org user in tests/integration/user-organizations.test.ts
+- [X] T041 [P] [US4] Author unit tests for organization switching Zod schema in tests/unit/validations/organization-switch.test.ts
+- [X] T042 [P] [US4] Author integration tests verifying get_user_organization_ids() returns all active tenant IDs for multi-org user in tests/integration/user-organizations.test.ts
 
 ### Implementation for User Story 4
 
-- [ ] T043 [US4] Implement server action switchOrganizationAction validating membership before setting bizflow_active_org cookie in src/actions/organization-actions.ts
-- [ ] T044 [P] [US4] Build Organization Switcher dropdown component in src/components/layout/OrganizationSwitcher.tsx
-- [ ] T045 [US4] Integrate Organization Switcher into Tenant Navigation Header in src/components/layout/TenantHeader.tsx
-- [ ] T046 [US4] Update signInAction and middleware to route multi-org users to their last active store preference in src/actions/auth-actions.ts and src/middleware.ts
-- [ ] T047 [US4] Execute end-to-end browser tests for multi-organization switching and persistent routing in tests/e2e/organization-switch.spec.ts
+- [X] T043 [US4] Implement server action switchOrganizationAction validating membership before setting bizflow_active_org cookie in src/actions/organization-actions.ts
+- [X] T044 [P] [US4] Build Organization Switcher dropdown component in src/components/layout/OrganizationSwitcher.tsx
+- [X] T045 [US4] Integrate Organization Switcher into Tenant Navigation Header in src/components/layout/TenantHeader.tsx
+- [X] T046 [US4] Update signInAction and middleware to route multi-org users to their last active store preference in src/actions/auth-actions.ts and src/middleware.ts
+- [X] T047 [US4] Execute end-to-end browser tests for multi-organization switching and persistent routing in tests/e2e/organization-switch.spec.ts
 
 **Checkpoint**: Multi-store navigation and switching is functional, responsive, and persistent.
 

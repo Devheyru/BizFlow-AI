@@ -202,29 +202,71 @@ export async function signInAction(
     };
   }
 
-  // Query user's active organizations
-  const { data: memberships } = await supabase
+  // Query user's active memberships with deterministic ordering (oldest active membership first)
+  const { data: memberships, error: memError } = await supabase
     .from("organization_memberships")
-    .select("organization_id, role, status")
+    .select("organization_id, role, status, created_at")
     .eq("user_id", user.id)
-    .eq("status", "active");
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
 
-  const orgIds = memberships?.map((m) => m.organization_id) || [];
-  let activeOrgs: Array<{ id: string; slug: string; name: string }> = [];
-
-  if (orgIds.length > 0) {
-    const { data: orgs } = await supabase
-      .from("organizations")
-      .select("id, slug, name")
-      .in("id", orgIds)
-      .eq("is_active", true);
-
-    if (orgs) {
-      activeOrgs = orgs;
-    }
+  if (memError) {
+    console.error("[signInAction] Error fetching memberships:", memError);
+    return {
+      success: false,
+      error: {
+        code: "ORGANIZATION_RESOLUTION_ERROR",
+        message: "Unable to verify organization memberships. Please try again.",
+      },
+    };
   }
 
-  // 1. If user has 0 active organizations, guide to onboarding
+  // If user successfully confirmed to have 0 active memberships, guide to onboarding
+  if (!memberships || memberships.length === 0) {
+    return {
+      success: true,
+      data: {
+        userId: user.id,
+        email: user.email || email,
+        isEmailVerified: true,
+        hasActiveOrganization: false,
+        redirectUrl: "/onboarding/create-organization",
+      },
+    };
+  }
+
+  // Extract ordered unique organization IDs
+  const orderedOrgIds = Array.from(new Set(memberships.map((m) => m.organization_id)));
+
+  // Query matching active organizations
+  const { data: orgs, error: orgError } = await supabase
+    .from("organizations")
+    .select("id, slug, name, created_at")
+    .in("id", orderedOrgIds)
+    .eq("is_active", true);
+
+  if (orgError) {
+    console.error("[signInAction] Error fetching organizations:", orgError);
+    return {
+      success: false,
+      error: {
+        code: "ORGANIZATION_RESOLUTION_ERROR",
+        message: "Unable to load organization details. Please try again.",
+      },
+    };
+  }
+
+  // Map to preserve deterministic order (oldest active membership first)
+  const orgMap = new Map<string, { id: string; slug: string; name: string }>();
+  for (const org of orgs || []) {
+    orgMap.set(org.id, org);
+  }
+
+  const activeOrgs = orderedOrgIds
+    .map((id) => orgMap.get(id))
+    .filter((org): org is { id: string; slug: string; name: string } => !!org);
+
+  // Deterministic fallback: first organization in activeOrgs (oldest active membership)
   const fallbackOrg = activeOrgs[0];
   if (!fallbackOrg || activeOrgs.length === 0) {
     return {
@@ -239,11 +281,10 @@ export async function signInAction(
     };
   }
 
-  // 2. If user has active organization(s), resolve preference from cookie or select first
   const cookieStore = await getSafeCookieStore();
   const preferredSlug = cookieStore.get("bizflow_active_org")?.value;
   const chosenOrg =
-    activeOrgs.find((o) => o.slug === preferredSlug) || fallbackOrg;
+    (preferredSlug ? activeOrgs.find((o) => o.slug === preferredSlug) : null) || fallbackOrg;
 
   // Set active organization cookie preference
   cookieStore.set("bizflow_active_org", chosenOrg.slug, {
@@ -275,8 +316,8 @@ export async function signOutAction(): Promise<ActionResult<SignOutResult>> {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
-  const cookieStore = await getSafeCookieStore();
-  cookieStore.delete("bizflow_active_org");
+
+  // Preserve bizflow_active_org preference for returning sign-in routing (FR-021)
 
   return {
     success: true,

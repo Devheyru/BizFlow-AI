@@ -9,47 +9,56 @@ import type { OrganizationSummary, AppRole } from "@/types/auth";
 export async function getUserActiveOrganizations(userId: string): Promise<OrganizationSummary[]> {
   const supabase = await createClient();
 
-  // 1. Query active memberships
+  // 1. Query active memberships ordered deterministically (oldest active membership first)
   const { data: memberships, error: memError } = await supabase
     .from("organization_memberships")
-    .select("organization_id, role, status")
+    .select("organization_id, role, status, created_at")
     .eq("user_id", userId)
-    .eq("status", "active");
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
 
   if (memError || !memberships || memberships.length === 0) {
     return [];
   }
 
-  const orgIds = memberships.map((m) => m.organization_id);
+  const orderedOrgIds = Array.from(new Set(memberships.map((m) => m.organization_id)));
 
   // 2. Query matching active organizations
   const { data: orgs, error: orgError } = await supabase
     .from("organizations")
-    .select("id, name, slug, business_type, country, currency, timezone, is_active")
-    .in("id", orgIds)
+    .select("id, name, slug, business_type, country, currency, timezone, is_active, created_at")
+    .in("id", orderedOrgIds)
     .eq("is_active", true);
 
   if (orgError || !orgs || orgs.length === 0) {
     return [];
   }
 
-  // 3. Map to OrganizationSummary
+  // 3. Map to OrganizationSummary preserving deterministic membership order
   const roleMap = new Map<string, AppRole>();
   for (const m of memberships) {
     roleMap.set(m.organization_id, m.role);
   }
 
-  return orgs.map((o) => ({
-    id: o.id,
-    name: o.name,
-    slug: o.slug,
-    businessType: o.business_type,
-    country: o.country,
-    currency: o.currency,
-    timezone: o.timezone,
-    isActive: o.is_active,
-    role: roleMap.get(o.id) || "cashier",
-  }));
+  const orgMap = new Map<string, (typeof orgs)[number]>();
+  for (const o of orgs) {
+    orgMap.set(o.id, o);
+  }
+
+  return orderedOrgIds
+    .map((id) => orgMap.get(id))
+    .filter((o): o is NonNullable<typeof o> => !!o)
+    .map((o) => ({
+      id: o.id,
+      name: o.name,
+      slug: o.slug,
+      businessType: o.business_type,
+      country: o.country,
+      currency: o.currency,
+      timezone: o.timezone,
+      isActive: o.is_active,
+      role: roleMap.get(o.id) || "cashier",
+    }));
 }
 
 /**

@@ -16,25 +16,34 @@ export default async function HomePage() {
       redirect("/verify-email");
     }
 
-    // Check organizations
-    const { data: memberships } = await supabase
+    // Check organizations with deterministic ordering (oldest active membership first)
+    const { data: memberships, error: memError } = await supabase
       .from("organization_memberships")
-      .select("organization_id")
+      .select("organization_id, created_at")
       .eq("user_id", user.id)
-      .eq("status", "active");
+      .eq("status", "active")
+      .order("created_at", { ascending: true });
 
-    const orgIds = memberships?.map((m) => m.organization_id) || [];
+    if (memError || !memberships || memberships.length === 0) {
+      redirect("/onboarding/create-organization");
+    }
+
+    const orderedOrgIds = Array.from(new Set(memberships.map((m) => m.organization_id)));
     let activeOrgs: Array<{ id: string; slug: string }> = [];
 
-    if (orgIds.length > 0) {
-      const { data: orgs } = await supabase
+    if (orderedOrgIds.length > 0) {
+      const { data: orgs, error: orgError } = await supabase
         .from("organizations")
-        .select("id, slug")
-        .in("id", orgIds)
+        .select("id, slug, created_at")
+        .in("id", orderedOrgIds)
         .eq("is_active", true);
 
-      if (orgs) {
-        activeOrgs = orgs;
+      if (!orgError && orgs) {
+        const orgMap = new Map(orgs.map((o) => [o.id, o]));
+        activeOrgs = orderedOrgIds
+          .map((id) => orgMap.get(id))
+          .filter((o): o is NonNullable<typeof o> => !!o)
+          .map((o) => ({ id: o.id, slug: o.slug }));
       }
     }
 
@@ -45,7 +54,8 @@ export default async function HomePage() {
 
     const cookieStore = await getSafeCookieStore();
     const preferredSlug = cookieStore.get("bizflow_active_org")?.value;
-    const chosen = activeOrgs.find((o) => o.slug === preferredSlug) || fallbackOrg;
+    const chosen =
+      (preferredSlug ? activeOrgs.find((o) => o.slug === preferredSlug) : null) || fallbackOrg;
 
     redirect(`/${chosen.slug}/dashboard`);
   }

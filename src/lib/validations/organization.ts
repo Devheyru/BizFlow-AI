@@ -60,3 +60,19 @@ export const createOrganizationSchema = z.object({
 
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 
+/**
+ * Zod validation schema for switching active organization context (T041, T043, FR-012).
+ * Supports switching by organizationId (UUID), slug, or both.
+ */
+export const switchOrganizationSchema = z
+  .object({
+    organizationId: z.string().uuid("Invalid organization identifier").optional(),
+    slug: z.string().trim().min(2, "Slug must be at least 2 characters").max(100).optional(),
+  })
+  .refine((data) => !!(data.organizationId || data.slug), {
+    message: "Either organizationId or slug must be provided",
+  });
+
+export type SwitchOrganizationInput = z.infer<typeof switchOrganizationSchema>;
+
+
