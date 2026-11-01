@@ -106,7 +106,7 @@ test.describe("T033: Organization Onboarding End-to-End User Flows (US2)", () =>
     // 5. Verify redirection to tenant dashboard
     await page.waitForURL(/\/dashboard/, { timeout: 20000 });
     await expect(page.getByRole("heading", { name: new RegExp(storeName, "i") })).toBeVisible();
-    await expect(page.getByText(/owner/i)).toBeVisible();
+    await expect(page.getByLabel("Your role: Owner")).toBeVisible();
 
     // Retrieve created org ID for teardown
     const { data: orgData } = await adminClient

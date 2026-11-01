@@ -1,3 +1,4 @@
+import type { User } from "@supabase/supabase-js";
 import type { Database, Tables, Enums } from "./database";
 
 // ============================================================================
@@ -70,6 +71,14 @@ export interface AuthenticatedUserSession {
   profile: Profile | null;
   activeOrganization: OrganizationSummary | null;
   userOrganizations: OrganizationSummary[];
+}
+
+export interface TenantContext {
+  user: User;
+  organization: Organization;
+  membership: OrganizationMembership;
+  role: AppRole;
+  activeOrganizations: OrganizationSummary[];
 }
 
 // ============================================================================

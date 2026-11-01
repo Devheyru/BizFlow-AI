@@ -1,4 +1,4 @@
-# Tasks: Authentication and Organization Foundation
+﻿# Tasks: Authentication and Organization Foundation
 
 **Feature**: `001-auth-organization` | **Input**: Design documents from `specs/001-auth-organization/`  
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)  
@@ -14,7 +14,7 @@ To ensure consistent implementation across all tasks, the system strictly enforc
    - Manages Supabase session token refresh via `@supabase/ssr`.
    - Handles client route redirection (e.g., unauthenticated visitors to `/sign-in`, unverified users to `/verify-email`).
    - Extracts route parameters (`/[slug]/...`) and validates session existence.
-   - **âš ï¸ Security Rule**: Never rely on middleware alone for tenant isolation or security authorization.
+   - **Ã¢Å¡Â Ã¯Â¸Â Security Rule**: Never rely on middleware alone for tenant isolation or security authorization.
 2. **Server-Side Helpers & Server Actions (`src/lib/auth/context.ts`, `src/actions/`)**:
    - Resolves user identity on the server using `supabase.auth.getUser()` (never trust unverified client tokens).
    - Validates email verification status (`is_email_verified()`).
@@ -53,7 +53,7 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 
 **Purpose**: Core database migrations, Supabase SSR client utilities, RLS security helpers, and shared UI primitives.
 
-**âš ï¸ CRITICAL SEQUENTIAL ORDER**: Database migrations MUST execute in exact numeric order (`01` â†’ `02` â†’ `03` â†’ `04`) to satisfy foreign keys, triggers, and policy dependencies. No user story implementation can begin until Phase 2 is complete.
+**Ã¢Å¡Â Ã¯Â¸Â CRITICAL SEQUENTIAL ORDER**: Database migrations MUST execute in exact numeric order (`01` Ã¢â€ â€™ `02` Ã¢â€ â€™ `03` Ã¢â€ â€™ `04`) to satisfy foreign keys, triggers, and policy dependencies. No user story implementation can begin until Phase 2 is complete.
 
 - [X] T006 Create Supabase SSR client utilities for browser, server, and middleware contexts in src/lib/supabase/client.ts, src/lib/supabase/server.ts, and src/lib/supabase/middleware.ts
 - [X] T007 Implement core database migration 01 for enums (app_role, membership_status) and base tables (profiles, organizations, organization_memberships, organization_audit_events) in supabase/migrations/20261031000001_auth_organization_schema.sql
@@ -64,17 +64,17 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 - [X] T012 [P] Create shared TypeScript types, database schema definitions, and action result interfaces in src/types/database.ts and src/types/auth.ts
 - [X] T013 [P] Implement base UI component primitives (Button, Input, Form, Label, Card, Alert, DropdownMenu) in src/components/ui/
 
-**Checkpoint**: Foundation ready â€” database schema, RLS policies, Supabase SSR clients, and base primitives are established and verified against a clean Supabase database.
+**Checkpoint**: Foundation ready Ã¢â‚¬â€ database schema, RLS policies, Supabase SSR clients, and base primitives are established and verified against a clean Supabase database.
 
 ---
 
-## Phase 3: User Story 1 - User Registration, Verification & Authentication (Priority: P1) ðŸŽ¯ MVP
+## Phase 3: User Story 1 - User Registration, Verification & Authentication (Priority: P1) Ã°Å¸Å½Â¯ MVP
 
 **Goal**: Provide secure account registration with password complexity enforcement, automated profile generation, email verification gating, cookie-based session management, sign-out, and route protection.
 
 **Independent Test**: Register an account with valid credentials; verify profile created in database; confirm unverified user is blocked from workspace routes and guided to `/verify-email`; confirm email verification; authenticate via sign-in; verify secure HTTP-only cookies; test sign-out and route guard redirection.
 
-### Tests for User Story 1 âš ï¸
+### Tests for User Story 1 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T025 after implementation components exist)*
 
 - [X] T014 [P] [US1] Author unit tests for registration and sign-in Zod validation schemas in tests/unit/validations/auth.test.ts
@@ -103,7 +103,7 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 
 **Independent Test**: Sign in with an email-verified user belonging to 0 organizations; verify automatic redirect to `/onboarding/create-organization`; submit valid store parameters (ISO country, currency, timezone); verify atomic creation of organization and membership row with `role = 'owner'`; verify replayed submission with identical `client_mutation_id` safely returns existing organization.
 
-### Tests for User Story 2 âš ï¸
+### Tests for User Story 2 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T033 after migration and implementation exist)*
 
 - [X] T026 [P] [US2] Author unit tests for organization creation Zod schema (ISO 3166-1 alpha-2, ISO 4217, name length) in tests/unit/validations/organization.test.ts
@@ -128,19 +128,19 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 
 **Independent Test**: Sign in as User A (belonging only to Org A); attempt to query Org B data via direct database query; verify PostgreSQL RLS returns 0 rows; attempt to access URL `/[org-b-slug]/dashboard`; verify server-side middleware and context resolution deny access and redirect safely.
 
-### Tests for User Story 3 âš ï¸
+### Tests for User Story 3 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T040. Must use separate authenticated user sessions with JWTs; never use service-role key)*
 
-- [ ] T034 [P] [US3] Author integration tests verifying tenant data isolation under FORCE RLS using separate authenticated user sessions and JWT contexts (never service-role) in tests/integration/tenant-isolation.test.ts
-- [ ] T035 [P] [US3] Author integration tests verifying direct client INSERT/UPDATE/DELETE on organization_memberships are denied by RLS in tests/integration/membership-rls.test.ts
+- [X] T034 [P] [US3] Author integration tests verifying tenant data isolation under FORCE RLS using separate authenticated user sessions and JWT contexts (never service-role) in tests/integration/tenant-isolation.test.ts
+- [X] T035 [P] [US3] Author integration tests verifying direct client INSERT/UPDATE/DELETE on organization_memberships are denied by RLS in tests/integration/membership-rls.test.ts
 
 ### Implementation for User Story 3
 
-- [ ] T036 [US3] Implement server-side tenant context resolution helper getTenantContext() validating user identity and active membership on the server in src/lib/auth/context.ts
-- [ ] T037 [US3] Implement tenant navigation middleware enforcing session refresh and slug routing (delegating tenant authorization to server components) in src/middleware.ts
-- [ ] T038 [P] [US3] Build Tenant Workspace layout and header shell with server-side authorization check in src/app/[slug]/layout.tsx and src/components/layout/TenantHeader.tsx
-- [ ] T039 [P] [US3] Build Tenant Dashboard overview page rendering store metadata and user role in src/app/[slug]/dashboard/page.tsx
-- [ ] T040 [US3] Execute integration and end-to-end tests verifying multi-tenant isolation, organization slug tampering, and cookie manipulation rejection in tests/e2e/tenant-isolation.spec.ts
+- [X] T036 [US3] Implement server-side tenant context resolution helper getTenantContext() validating user identity and active membership on the server in src/lib/auth/context.ts
+- [X] T037 [US3] Implement tenant navigation middleware enforcing session refresh and slug routing (delegating tenant authorization to server components) in src/middleware.ts
+- [X] T038 [P] [US3] Build Tenant Workspace layout and header shell with server-side authorization check in src/app/[slug]/layout.tsx and src/components/layout/TenantHeader.tsx
+- [X] T039 [P] [US3] Build Tenant Dashboard overview page rendering store metadata and user role in src/app/[slug]/dashboard/page.tsx
+- [X] T040 [US3] Execute integration and end-to-end tests verifying multi-tenant isolation, organization slug tampering, and cookie manipulation rejection in tests/e2e/tenant-isolation.spec.ts
 
 **Checkpoint**: Core multi-tenant boundary is active and verified. Tenant isolation is strictly enforced at database and server layers.
 
@@ -152,7 +152,7 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 
 **Independent Test**: Seed User A with active memberships in Org A and Org B; sign in; verify Organization Switcher displays both stores; switch context to Org B; verify `bizflow_active_org` cookie is set to Org B and dashboard reloads under Org B; sign out and sign back in; verify automatic routing to Org B.
 
-### Tests for User Story 4 âš ï¸
+### Tests for User Story 4 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T047 after actions and switcher exist)*
 
 - [ ] T041 [P] [US4] Author unit tests for organization switching Zod schema in tests/unit/validations/organization-switch.test.ts
@@ -176,7 +176,7 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 
 **Independent Test**: Submit password reset request for registered email; verify generic anti-enumeration response; exchange recovery token via callback; reset password with strong symbol-containing password; verify existing sessions revoked; authenticate with new password; navigate to profile settings and update name/phone; verify updated data persists.
 
-### Tests for User Story 5 âš ï¸
+### Tests for User Story 5 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T058 after profile actions and pages exist)*
 
 - [ ] T048 [P] [US5] Author unit tests for forgot-password, reset-password, and profile update Zod schemas in tests/unit/validations/profile-password.test.ts
@@ -231,7 +231,7 @@ flowchart TD
 
 1. **Setup (Phase 1)**: Must run first; provisions project packages, linting, testing dependencies, and local Supabase setup.
 2. **Foundational (Phase 2)**: Core blocking prerequisites. Database migrations MUST execute sequentially:
-   `T007` (Migration 01: Schema) â†’ `T008` (Migration 02: Triggers) â†’ `T009` (Migration 03: Security Helpers) â†’ `T010` (Migration 04: RLS Policies) â†’ `T011` (Clean DB Reset Verification).
+   `T007` (Migration 01: Schema) Ã¢â€ â€™ `T008` (Migration 02: Triggers) Ã¢â€ â€™ `T009` (Migration 03: Security Helpers) Ã¢â€ â€™ `T010` (Migration 04: RLS Policies) Ã¢â€ â€™ `T011` (Clean DB Reset Verification).
 3. **User Story 1 (Phase 3)**: MVP Milestone. User identity and authentication foundation. Test authoring (`T014`, `T015`) may happen in parallel with schemas, but execution (`T025`) runs after implementation.
 4. **User Story 2 (Phase 4)**: Depends on US1 (verified user session required to create organization). Migration `T028` (`05_create_organization_rpc`) executes on top of Phase 2 migrations.
 5. **User Story 3 (Phase 5)**: Depends on US2 (requires organizations to enforce tenant context). Integration tests (`T034`, `T035`) execute under separate authenticated sessions.
@@ -245,7 +245,7 @@ flowchart TD
 
 - **Phase 1 (Setup)**: T002, T003, and T004 can proceed concurrently.
 - **Phase 2 (Foundational)**: T012 (TypeScript types) and T013 (UI primitives) can proceed in parallel once migrations are established.
-- **Phase 3 (US1)**: Test authoring T014, T015, Schema T016, Callback T020, Middleware T021, and UI pages T022, T023, T024 can be authored in parallel once T006â€“T013 complete.
+- **Phase 3 (US1)**: Test authoring T014, T015, Schema T016, Callback T020, Middleware T021, and UI pages T022, T023, T024 can be authored in parallel once T006Ã¢â‚¬â€œT013 complete.
 - **Phase 4 (US2)**: Test authoring T026, T027, Schema T029, and UI page T031 can proceed in parallel with RPC T028.
 - **Phase 5 (US3)**: Test authoring T034, T035, Layout T038, and Dashboard page T039 can proceed in parallel with Context resolver T036.
 - **Phase 6 (US4)**: Test authoring T041, T042, and Switcher component T044 can proceed in parallel with server action T043.
@@ -256,8 +256,8 @@ flowchart TD
 
 ## Implementation Strategy & Milestones
 
-### Milestone 1: Minimum Viable Product (Phase 1 to Phase 3) ðŸŽ¯
-- **Scope**: Setup, sequential database migrations (01â€“04), clean DB reset verification, User Registration, Email Verification screen, Sign-In, Sign-Out, Session Cookie management, and Protected Route redirection.
+### Milestone 1: Minimum Viable Product (Phase 1 to Phase 3) Ã°Å¸Å½Â¯
+- **Scope**: Setup, sequential database migrations (01Ã¢â‚¬â€œ04), clean DB reset verification, User Registration, Email Verification screen, Sign-In, Sign-Out, Session Cookie management, and Protected Route redirection.
 - **Validation**: Run `npm run test:unit`, `tests/integration/auth-trigger.test.ts`, and `tests/e2e/auth-flow.spec.ts`. Verify complete user lifecycle without errors.
 
 ### Milestone 2: Single-Tenant Business Onboarding (Phase 4 & Phase 5)
