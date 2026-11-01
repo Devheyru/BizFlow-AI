@@ -58,7 +58,9 @@ export interface OrganizationSummary {
   timezone: string;
   isActive: boolean;
   role: AppRole;
-  membershipStatus: MembershipStatus;
+  membershipStatus?: MembershipStatus;
+  isIdempotentReplay?: boolean;
+  redirectUrl?: string;
 }
 
 export interface AuthenticatedUserSession {
@@ -110,4 +112,3 @@ export interface SwitchOrganizationResult {
   slug: string;
   redirectUrl: string;
 }
-

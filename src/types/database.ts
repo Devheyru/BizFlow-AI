@@ -3,7 +3,25 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type Database = {
   
-  "public": {
+  "graphql_public": {
+          Tables: {
+            [_ in never]: never
+          }
+          Views: {
+            [_ in never]: never
+          }
+          Functions: {
+            "graphql":
+{ Args: { "extensions"?: Json,"operationName"?: string,"query"?: string,"variables"?: Json }; Returns: Json
+                           }
+          }
+          Enums: {
+            [_ in never]: never
+          }
+          CompositeTypes: {
+            [_ in never]: never
+          }
+        },"public": {
           Tables: {
             "organization_audit_events": {
                   Row: {
@@ -103,11 +121,14 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "get_user_organization_ids":
-{ Args: Record<string, never>; Returns: string[]
+            "create_organization_with_owner":
+{ Args: { "p_address"?: string,"p_business_type": string,"p_client_mutation_id": string,"p_country": string,"p_currency": string,"p_email"?: string,"p_name": string,"p_phone"?: string,"p_slug": string,"p_tax_id"?: string,"p_timezone": string }; Returns: Json
+                           },
+"get_user_organization_ids":
+{ Args: Record<PropertyKey, never>; Returns: string[]
                            },
 "is_email_verified":
-{ Args: Record<string, never>; Returns: boolean
+{ Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "is_org_member":
 { Args: { "p_org_id": string,"p_roles"?: (Database["public"]['Enums']["app_role"])[] }; Returns: boolean
@@ -228,7 +249,11 @@ export type CompositeTypes<
   : never
 
 export const Constants = {
-  "public": {
+  "graphql_public": {
+          Enums: {
+            
+          }
+        },"public": {
           Enums: {
             "app_role": ["owner", "admin", "manager", "cashier"],"membership_status": ["active", "suspended", "revoked"]
           }
