@@ -1,25 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-
-/**
- * Sanitizes open redirect parameters to guarantee redirection remains within relative application paths.
- * Protects against open-redirect vectors like //evil.com, javascript:, or CRLF injections.
- */
-function sanitizeRedirectUrl(target: string | null): string {
-  if (!target) return "/";
-
-  // Strict check: must start with single '/', no protocol relative '//', no schemes ':', no backslashes '\'
-  if (
-    target.startsWith("/") &&
-    !target.startsWith("//") &&
-    !target.includes(":") &&
-    !target.includes("\\")
-  ) {
-    return target;
-  }
-
-  return "/";
-}
+import { sanitizeRedirectUrl } from "@/lib/auth/redirect";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -41,4 +22,3 @@ export async function GET(request: NextRequest) {
     new URL("/sign-in?error=auth_callback_failed", request.url)
   );
 }
-
