@@ -20,7 +20,13 @@ import type {
   SignInResult,
   SignOutResult,
   PasswordResetResult,
+  ResetPasswordExecutionResult,
 } from "@/types/auth";
+import {
+  validateRecoveryAuthorization,
+  consumeRecoveryGrant,
+  clearRecoveryGrant,
+} from "@/lib/auth/recovery";
 
 /**
  * Register a new user with password complexity and anti-enumeration safeguards (FR-001, FR-002).
@@ -202,29 +208,71 @@ export async function signInAction(
     };
   }
 
-  // Query user's active organizations
-  const { data: memberships } = await supabase
+  // Query user's active memberships with deterministic ordering (oldest active membership first)
+  const { data: memberships, error: memError } = await supabase
     .from("organization_memberships")
-    .select("organization_id, role, status")
+    .select("organization_id, role, status, created_at")
     .eq("user_id", user.id)
-    .eq("status", "active");
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
 
-  const orgIds = memberships?.map((m) => m.organization_id) || [];
-  let activeOrgs: Array<{ id: string; slug: string; name: string }> = [];
-
-  if (orgIds.length > 0) {
-    const { data: orgs } = await supabase
-      .from("organizations")
-      .select("id, slug, name")
-      .in("id", orgIds)
-      .eq("is_active", true);
-
-    if (orgs) {
-      activeOrgs = orgs;
-    }
+  if (memError) {
+    console.error("[signInAction] Error fetching memberships:", memError);
+    return {
+      success: false,
+      error: {
+        code: "ORGANIZATION_RESOLUTION_ERROR",
+        message: "Unable to verify organization memberships. Please try again.",
+      },
+    };
   }
 
-  // 1. If user has 0 active organizations, guide to onboarding
+  // If user successfully confirmed to have 0 active memberships, guide to onboarding
+  if (!memberships || memberships.length === 0) {
+    return {
+      success: true,
+      data: {
+        userId: user.id,
+        email: user.email || email,
+        isEmailVerified: true,
+        hasActiveOrganization: false,
+        redirectUrl: "/onboarding/create-organization",
+      },
+    };
+  }
+
+  // Extract ordered unique organization IDs
+  const orderedOrgIds = Array.from(new Set(memberships.map((m) => m.organization_id)));
+
+  // Query matching active organizations
+  const { data: orgs, error: orgError } = await supabase
+    .from("organizations")
+    .select("id, slug, name, created_at")
+    .in("id", orderedOrgIds)
+    .eq("is_active", true);
+
+  if (orgError) {
+    console.error("[signInAction] Error fetching organizations:", orgError);
+    return {
+      success: false,
+      error: {
+        code: "ORGANIZATION_RESOLUTION_ERROR",
+        message: "Unable to load organization details. Please try again.",
+      },
+    };
+  }
+
+  // Map to preserve deterministic order (oldest active membership first)
+  const orgMap = new Map<string, { id: string; slug: string; name: string }>();
+  for (const org of orgs || []) {
+    orgMap.set(org.id, org);
+  }
+
+  const activeOrgs = orderedOrgIds
+    .map((id) => orgMap.get(id))
+    .filter((org): org is { id: string; slug: string; name: string } => !!org);
+
+  // Deterministic fallback: first organization in activeOrgs (oldest active membership)
   const fallbackOrg = activeOrgs[0];
   if (!fallbackOrg || activeOrgs.length === 0) {
     return {
@@ -239,11 +287,10 @@ export async function signInAction(
     };
   }
 
-  // 2. If user has active organization(s), resolve preference from cookie or select first
   const cookieStore = await getSafeCookieStore();
   const preferredSlug = cookieStore.get("bizflow_active_org")?.value;
   const chosenOrg =
-    activeOrgs.find((o) => o.slug === preferredSlug) || fallbackOrg;
+    (preferredSlug ? activeOrgs.find((o) => o.slug === preferredSlug) : null) || fallbackOrg;
 
   // Set active organization cookie preference
   cookieStore.set("bizflow_active_org", chosenOrg.slug, {
@@ -275,8 +322,8 @@ export async function signOutAction(): Promise<ActionResult<SignOutResult>> {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
-  const cookieStore = await getSafeCookieStore();
-  cookieStore.delete("bizflow_active_org");
+
+  // Preserve bizflow_active_org preference for returning sign-in routing (FR-021)
 
   return {
     success: true,
@@ -361,10 +408,11 @@ export async function requestPasswordResetAction(
 
 /**
  * Update user password using the authenticated recovery session.
+ * Requires an active, server-validated recovery authorization grant and AMR.
  */
 export async function resetPasswordAction(
   rawInput: ResetPasswordInput
-): Promise<ActionResult<{ redirectUrl: string }>> {
+): Promise<ActionResult<ResetPasswordExecutionResult>> {
   const parseResult = resetPasswordSchema.safeParse(rawInput);
   if (!parseResult.success) {
     return {
@@ -381,16 +429,90 @@ export async function resetPasswordAction(
   const { newPassword } = parseResult.data;
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.updateUser({
+  // 1. Validate authenticated session
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!user || !session) {
+    return {
+      success: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: "You must have a valid recovery session to reset your password.",
+      },
+    };
+  }
+
+  // 2. Validate recovery-specific authorization
+  const authCheck = await validateRecoveryAuthorization(supabase, user.id, session);
+  if (!authCheck.success) {
+    let message = "Unauthorized password reset attempt. A valid recovery session is required.";
+    if (authCheck.reason === "expired") {
+      message = "Your password reset session has expired. Please request a new link.";
+    } else if (authCheck.reason === "invalid") {
+      message = "This password reset link has already been used or is invalid. Please request a new link.";
+    }
+
+    return {
+      success: false,
+      error: {
+        code: authCheck.reason === "expired" ? "RECOVERY_EXPIRED" : "UNAUTHORIZED_RECOVERY",
+        message,
+      },
+    };
+  }
+
+  // 3. Atomically consume the single-use recovery grant in PostgreSQL to prevent concurrent replay
+  const consumed = await consumeRecoveryGrant(
+    supabase,
+    authCheck.payload.nonce,
+    user.id
+  );
+
+  if (!consumed) {
+    return {
+      success: false,
+      error: {
+        code: "UNAUTHORIZED_RECOVERY",
+        message: "This password reset link has already been used or expired. Please request a new link.",
+      },
+    };
+  }
+
+  // 4. Update password
+  const { error: updateError } = await supabase.auth.updateUser({
     password: newPassword,
   });
 
-  if (error) {
+  if (updateError) {
     return {
       success: false,
       error: {
         code: "RESET_FAILED",
-        message: error.message || "Failed to update password. Please request a new link.",
+        message: "Failed to update password. Please request a new reset link.",
+      },
+    };
+  }
+
+  // 5. Invalidate single-use recovery grant cookie immediately
+  await clearRecoveryGrant();
+
+  // 6. Revoke all active sessions across devices upon password reset (FR-006, T053)
+  const { error: signOutError } = await supabase.auth.signOut({ scope: "global" });
+
+  if (signOutError) {
+    console.error("[resetPasswordAction] Global session revocation warning:", signOutError);
+    return {
+      success: true,
+      data: {
+        redirectUrl: "/sign-in?reset=success&revocation=failed",
+        revocationStatus: "failed",
+        warning: "Your password was updated, but revoking other active sessions failed.",
       },
     };
   }
@@ -399,6 +521,7 @@ export async function resetPasswordAction(
     success: true,
     data: {
       redirectUrl: "/sign-in?reset=success",
+      revocationStatus: "revoked",
     },
   };
 }

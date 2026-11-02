@@ -110,6 +110,18 @@ export interface PasswordResetResult {
   message: string;
 }
 
+export interface ResetPasswordExecutionResult {
+  redirectUrl: string;
+  revocationStatus: "revoked" | "failed";
+  warning?: string;
+}
+
+export interface ChangePasswordExecutionResult {
+  message: string;
+  revocationStatus: "revoked" | "failed";
+  warning?: string;
+}
+
 export interface CreateOrganizationResult {
   organization: Organization;
   membership: OrganizationMembership;

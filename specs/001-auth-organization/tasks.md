@@ -1,4 +1,4 @@
-﻿# Tasks: Authentication and Organization Foundation
+# Tasks: Authentication and Organization Foundation
 
 **Feature**: `001-auth-organization` | **Input**: Design documents from `specs/001-auth-organization/`  
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)  
@@ -155,16 +155,16 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 ### Tests for User Story 4 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T047 after actions and switcher exist)*
 
-- [ ] T041 [P] [US4] Author unit tests for organization switching Zod schema in tests/unit/validations/organization-switch.test.ts
-- [ ] T042 [P] [US4] Author integration tests verifying get_user_organization_ids() returns all active tenant IDs for multi-org user in tests/integration/user-organizations.test.ts
+- [X] T041 [P] [US4] Author unit tests for organization switching Zod schema in tests/unit/validations/organization-switch.test.ts
+- [X] T042 [P] [US4] Author integration tests verifying get_user_organization_ids() returns all active tenant IDs for multi-org user in tests/integration/user-organizations.test.ts
 
 ### Implementation for User Story 4
 
-- [ ] T043 [US4] Implement server action switchOrganizationAction validating membership before setting bizflow_active_org cookie in src/actions/organization-actions.ts
-- [ ] T044 [P] [US4] Build Organization Switcher dropdown component in src/components/layout/OrganizationSwitcher.tsx
-- [ ] T045 [US4] Integrate Organization Switcher into Tenant Navigation Header in src/components/layout/TenantHeader.tsx
-- [ ] T046 [US4] Update signInAction and middleware to route multi-org users to their last active store preference in src/actions/auth-actions.ts and src/middleware.ts
-- [ ] T047 [US4] Execute end-to-end browser tests for multi-organization switching and persistent routing in tests/e2e/organization-switch.spec.ts
+- [X] T043 [US4] Implement server action switchOrganizationAction validating membership before setting bizflow_active_org cookie in src/actions/organization-actions.ts
+- [X] T044 [P] [US4] Build Organization Switcher dropdown component in src/components/layout/OrganizationSwitcher.tsx
+- [X] T045 [US4] Integrate Organization Switcher into Tenant Navigation Header in src/components/layout/TenantHeader.tsx
+- [X] T046 [US4] Update signInAction and middleware to route multi-org users to their last active store preference in src/actions/auth-actions.ts and src/middleware.ts
+- [X] T047 [US4] Execute end-to-end browser tests for multi-organization switching and persistent routing in tests/e2e/organization-switch.spec.ts
 
 **Checkpoint**: Multi-store navigation and switching is functional, responsive, and persistent.
 
@@ -179,20 +179,20 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 ### Tests for User Story 5 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T058 after profile actions and pages exist)*
 
-- [ ] T048 [P] [US5] Author unit tests for forgot-password, reset-password, and profile update Zod schemas in tests/unit/validations/profile-password.test.ts
-- [ ] T049 [P] [US5] Author integration tests verifying profiles_update_own RLS policy permits updating own profile only in tests/integration/profile-rls.test.ts
-- [ ] T050 [P] [US5] Author integration tests verifying password reset triggers Supabase session revocation across all existing client sessions in tests/integration/session-revocation.test.ts
+- [X] T048 [P] [US5] Author unit tests for forgot-password, reset-password, and profile update Zod schemas in tests/unit/validations/profile-password.test.ts
+- [X] T049 [P] [US5] Author integration tests verifying profiles_update_own RLS policy permits updating own profile only in tests/integration/profile-rls.test.ts
+- [X] T050 [P] [US5] Author integration tests verifying password reset triggers Supabase session revocation across all existing client sessions in tests/integration/session-revocation.test.ts
 
 ### Implementation for User Story 5
 
-- [ ] T051 [P] [US5] Define password recovery and profile Zod schemas (forgotPasswordSchema, resetPasswordSchema, updateProfileSchema) in src/lib/validations/auth.ts
-- [ ] T052 [US5] Implement server action requestPasswordResetAction with anti-enumeration response in src/actions/auth-actions.ts
-- [ ] T053 [US5] Implement server action resetPasswordAction updating credentials and triggering refresh token revocation in src/actions/auth-actions.ts
-- [ ] T054 [US5] Implement server action updateProfileAction for personal name and phone modifications in src/actions/profile-actions.ts
-- [ ] T055 [P] [US5] Build Forgot Password page and form in src/app/(auth)/forgot-password/page.tsx and src/components/auth/ForgotPasswordForm.tsx
-- [ ] T056 [P] [US5] Build Reset Password page and form in src/app/(auth)/reset-password/page.tsx and src/components/auth/ResetPasswordForm.tsx
-- [ ] T057 [P] [US5] Build User Profile settings page and form in src/app/settings/profile/page.tsx and src/components/settings/ProfileForm.tsx
-- [ ] T058 [US5] Execute unit, integration, and end-to-end browser tests for password recovery, session revocation, and profile editing in tests/e2e/profile-password.spec.ts
+- [X] T051 [P] [US5] Define password recovery and profile Zod schemas (forgotPasswordSchema, resetPasswordSchema, updateProfileSchema) in src/lib/validations/auth.ts
+- [X] T052 [US5] Implement server action requestPasswordResetAction with anti-enumeration response in src/actions/auth-actions.ts
+- [X] T053 [US5] Implement server action resetPasswordAction updating credentials and triggering refresh token revocation in src/actions/auth-actions.ts
+- [X] T054 [US5] Implement server action updateProfileAction for personal name and phone modifications in src/actions/profile-actions.ts
+- [X] T055 [P] [US5] Build Forgot Password page and form in src/app/(auth)/forgot-password/page.tsx and src/components/auth/ForgotPasswordForm.tsx
+- [X] T056 [P] [US5] Build Reset Password page and form in src/app/(auth)/reset-password/page.tsx and src/components/auth/ResetPasswordForm.tsx
+- [X] T057 [P] [US5] Build User Profile settings page and form in src/app/settings/profile/page.tsx and src/components/settings/ProfileForm.tsx
+- [X] T058 [US5] Execute unit, integration, and end-to-end browser tests for password recovery, session revocation, and profile editing in tests/e2e/profile-password.spec.ts
 
 **Checkpoint**: User self-service account management and recovery is complete.
 

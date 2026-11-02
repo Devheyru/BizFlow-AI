@@ -4,9 +4,15 @@ import { z } from "zod";
 import { createClient, getSafeCookieStore } from "@/lib/supabase/server";
 import {
   createOrganizationSchema,
+  switchOrganizationSchema,
   type CreateOrganizationInput,
+  type SwitchOrganizationInput,
 } from "@/lib/validations/organization";
-import type { ActionResult, OrganizationSummary } from "@/types/auth";
+import type {
+  ActionResult,
+  OrganizationSummary,
+  SwitchOrganizationResult,
+} from "@/types/auth";
 
 /**
  * Strict runtime schema validator for create_organization_with_owner() RPC output.
@@ -223,3 +229,132 @@ export async function createOrganizationAction(
     },
   };
 }
+
+/**
+ * Server Action: switchOrganizationAction (T043, FR-012, FR-013)
+ *
+ * Switches the user's active retail organization context preference.
+ * Validates authentication, email confirmation, active organization status,
+ * and active membership before setting the `bizflow_active_org` cookie.
+ */
+export async function switchOrganizationAction(
+  rawInput: SwitchOrganizationInput
+): Promise<ActionResult<SwitchOrganizationResult>> {
+  // 1. Zod input validation
+  const parseResult = switchOrganizationSchema.safeParse(rawInput);
+  if (!parseResult.success) {
+    const errorMsg =
+      parseResult.error.errors[0]?.message || "Invalid organization switch parameters";
+    return {
+      success: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: errorMsg,
+      },
+    };
+  }
+
+  const { organizationId, slug } = parseResult.data;
+
+  // 2. Server-side session authentication
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return {
+      success: false,
+      error: {
+        code: "P0003",
+        message: "Authentication required to switch organization",
+      },
+    };
+  }
+
+  // 3. Email verification check
+  if (!user.email_confirmed_at) {
+    return {
+      success: false,
+      error: {
+        code: "P0001",
+        message: "Email verification required before switching organization",
+      },
+    };
+  }
+
+  // 4. Resolve target organization (enforcing active status)
+  let orgQuery = supabase
+    .from("organizations")
+    .select("id, name, slug, is_active")
+    .eq("is_active", true);
+
+  if (organizationId) {
+    orgQuery = orgQuery.eq("id", organizationId);
+  } else if (slug) {
+    orgQuery = orgQuery.eq("slug", slug);
+  }
+
+  const { data: organization, error: orgError } = await orgQuery.maybeSingle();
+
+  if (orgError || !organization) {
+    return {
+      success: false,
+      error: {
+        code: "P0015",
+        message: "Organization not found or inactive",
+      },
+    };
+  }
+
+  // 5. Verify caller's membership in target organization
+  const { data: membership, error: memError } = await supabase
+    .from("organization_memberships")
+    .select("role, status")
+    .eq("organization_id", organization.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (memError || !membership) {
+    return {
+      success: false,
+      error: {
+        code: "P0004",
+        message: "You are not a member of this organization",
+      },
+    };
+  }
+
+  if (membership.status !== "active") {
+    return {
+      success: false,
+      error: {
+        code: "P0005",
+        message: "Your membership in this organization is suspended or revoked",
+      },
+    };
+  }
+
+  // 6. Set active organization cookie preference
+  const cookieStore = await getSafeCookieStore();
+  cookieStore.set("bizflow_active_org", organization.slug, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+  });
+
+  const redirectUrl = `/${organization.slug}/dashboard`;
+
+  return {
+    success: true,
+    data: {
+      organizationId: organization.id,
+      slug: organization.slug,
+      redirectUrl,
+    },
+  };
+}
+

@@ -86,9 +86,64 @@ export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 /**
  * Password update / reset schema
  */
-export const resetPasswordSchema = z.object({
-  newPassword: passwordSchema,
-});
+export const resetPasswordSchema = z
+  .object({
+    newPassword: passwordSchema,
+    confirmPassword: z
+      .string({ required_error: "Password confirmation is required" })
+      .min(1, "Password confirmation is required"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+/**
+ * Account profile update schema (FR-007, US5)
+ */
+export const updateProfileSchema = z.object({
+  firstName: z
+    .string()
+    .trim()
+    .min(1, "First name is required")
+    .max(50, "First name cannot exceed 50 characters"),
+  lastName: z
+    .string()
+    .trim()
+    .min(1, "Last name is required")
+    .max(50, "Last name cannot exceed 50 characters"),
+  phone: z
+    .string()
+    .trim()
+    .refine(
+      (val) => val === "" || (val.length >= 7 && val.length <= 20),
+      "Phone number must be between 7 and 20 characters"
+    )
+    .optional()
+    .or(z.literal("")),
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/**
+ * Authenticated password change schema (US5)
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(1, "Please confirm your new password"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "New passwords do not match",
+    path: ["confirmPassword"],
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: "New password must be different from current password",
+    path: ["newPassword"],
+  });
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
