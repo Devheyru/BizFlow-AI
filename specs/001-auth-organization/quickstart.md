@@ -1,8 +1,8 @@
 # Quickstart Guide: Authentication & Organization Foundation (Hardened Architecture)
 
 **Feature**: `001-auth-organization`  
-**Revision Date**: 2026-10-30  
-**Status**: Final Authorization, Audit & Timestamp Revision (Pass 4)  
+**Revision Date**: 2026-11-02  
+**Status**: Feature 001 Complete & Verified (Phase 8 Final Polish)  
 
 ---
 
@@ -37,31 +37,39 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 ## 3. Database Migration & RLS Deployment
 
-Apply the Feature 001 database migration using the Supabase CLI:
+Apply the complete set of 8 database migrations using the Supabase CLI:
 
 ```bash
 # Start local Supabase containers (PostgreSQL, Auth, Storage)
-supabase start
+npx supabase start
 
 # Apply Feature 001 database migrations, triggers, and RLS policies
-supabase db reset
+npx supabase db reset
 ```
 
-This provisions:
-1. Enum types: `app_role`, `membership_status`, `invitation_status`.
-2. Tables with universal `FORCE ROW LEVEL SECURITY`: `profiles`, `organizations`, `organization_memberships`, `organization_invitations`.
-3. Non-recursive security-definer helper functions owned by `postgres` (`BYPASSRLS`): `is_email_verified()`, `get_user_organization_ids()`, `is_org_member()`.
-4. Invariant trigger: `trg_check_owner_invariant` with organization-level row locking.
-5. Controlled database RPCs enforcing uniform lock ordering:
-   - `create_organization_with_owner()` with creator-bound idempotency and email verification.
-   - `transfer_organization_ownership()` with promote-before-demote ordering under organization lock.
-   - `update_member_role()` & `update_member_status()` preventing privilege escalation.
-   - `remove_member()` enforcing owner invariants.
-   - `close_organization()` enforcing owner confirmation, audit timestamps, and invitation revocations.
-   - `accept_organization_invitation()` with strict status-before-expiry checks and membership state protection.
-6. User profile sync trigger: `handle_new_user()` on `auth.users`.
-7. Audit events table: `organization_audit_events` with universal `FORCE RLS` and immutable client-side policies.
-8. Invitation revocation RPC: `revoke_invitation()` with pending-status validation and audit event recording.
+This provisions the complete foundation:
+1. **Schema & Types** (`01_auth_organization_schema.sql`):
+   - Enums: `app_role` (`owner`, `admin`, `manager`, `cashier`), `membership_status` (`active`, `suspended`, `revoked`).
+   - Tables: `profiles`, `organizations`, `organization_memberships`, `organization_audit_events`.
+2. **Auth Triggers** (`02_auth_triggers.sql`):
+   - User profile auto-creation trigger: `handle_new_user()` on `auth.users`.
+   - Single-owner invariant trigger: `trg_check_owner_invariant`.
+3. **Security Helpers** (`03_security_helpers.sql` & `06_security_remediation.sql`):
+   - Non-recursive security-definer helper functions owned by `postgres`:
+     - `is_email_verified()`
+     - `get_user_organization_ids()` (filters strictly for `om.status = 'active'` AND `o.is_active = true`)
+     - `is_org_member(p_org_id, p_roles)`
+4. **Universal FORCE RLS** (`04_rls_policies.sql`):
+   - Universal `FORCE ROW LEVEL SECURITY` on all tenant tables.
+   - Strict deny-all direct client mutation policies on `organization_memberships` and `organization_audit_events`.
+5. **Hardening & Immutability** (`05_security_hardening.sql` & `06_security_remediation.sql`):
+   - Immutable fields guard on organizations (`created_by`, `created_at`, `client_mutation_id`).
+   - Dropped all temporary test RPCs (`demote_member_role_for_testing`).
+6. **Creator-Bound Onboarding RPC** (`07_create_organization_rpc.sql`):
+   - `create_organization_with_owner()` with database-level input validation, ISO checks, creator-bound idempotency, and atomic Owner assignment.
+7. **Atomic Single-Use Recovery Grants** (`08_recovery_grants.sql`):
+   - Table `recovery_grants` with strict RLS and exclusive SECURITY DEFINER access.
+   - Atomic stored procedures: `create_recovery_grant()`, `verify_recovery_grant()`, and `consume_recovery_grant()` utilizing PostgreSQL row locking.
 
 ---
 
@@ -89,33 +97,42 @@ Application runs at `http://localhost:3000`.
 | **SEC-04** | **Concurrent Demotions** | Two parallel transactions demote two Owners in same org | Organization-level row lock serializes transactions; second transaction aborts with `P0002`. |
 | **SEC-05** | **Creator-Bound Idempotency** | User B attempts creation replay using User A's `client_mutation_id` | Does NOT return User A's organization; creates distinct organization for User B. |
 | **SEC-06** | **Owner-Only Store Closure** | Admin attempts direct update to `is_active` or calls `close_organization()` | Rejected by RLS / aborts with `P0004: Only verified organization owners can close`. |
-| **SEC-07** | **Closure Audit Trail** | Owner closes store with matching confirmation name | Sets `is_active = false`, records `closed_at` and `closed_by`, revokes all pending invitations. |
-| **SEC-08** | **Status-Before-Expiry Check** | Call `accept_organization_invitation()` on an accepted or revoked invite past expiry | Returns `ALREADY_ACCEPTED` or `INVITATION_REVOKED`; existing status is NOT overwritten with `expired`. |
-| **SEC-09** | **Active Role Protection** | Accept Cashier invite while already an active Owner/Admin | Aborts with `ALREADY_ACTIVE_MEMBER`; existing role is NOT modified. |
-| **SEC-10** | **Suspension Protection** | Accept invite while membership `status = 'suspended'` | Aborts with `ACCOUNT_SUSPENDED`; account is NOT reactivated. |
-| **SEC-11** | **Universal Forced RLS** | Concurrent queries across all tenant tables under `FORCE RLS` | Queries execute under `authenticated` without PostgreSQL recursion errors. |
-| **SEC-12** | **RPC Authorization Independence** | Call `update_member_role()`, `update_member_status()`, `remove_member()` without authentication | Aborts with `P0003: Authentication required`. |
-| **SEC-13** | **RPC Email Verification Gate** | Call `transfer_organization_ownership()`, `remove_member()`, `close_organization()` from unverified account | Aborts with `P0001: Email verification required`. |
-| **SEC-14** | **Closed Organization Guard** | Call any membership-mutating RPC against a closed organization (`is_active = false`) | Aborts with `P0015: Cannot modify a closed organization`. |
-| **SEC-15** | **Owner Removal Protection** | Call `remove_member()` targeting a member with `role = 'owner'` | Aborts with `P0011: Cannot remove an Owner`. |
-| **SEC-16** | **Invitation Mutation Denial** | Client executes direct `UPDATE` on `organization_invitations` | Rejected by RLS (`invitations_update_deny_direct`); 0 rows affected. |
-| **SEC-17** | **Invitation Revocation RPC** | Call `revoke_invitation()` on a pending invitation as Owner/Admin | Succeeds; invitation status set to `revoked`; audit event recorded. |
-| **SEC-18** | **Audit Event Immutability** | Client executes direct `INSERT`, `UPDATE`, or `DELETE` on `organization_audit_events` | Rejected by RLS; 0 rows affected. |
-| **SEC-19** | **Audit Event Recording** | Owner closes organization via `close_organization()` | Audit event `organization.closed` recorded with actor, confirmation name, and timestamp. |
-| **SEC-20** | **Transfer Authorization Order** | Unauthenticated caller invokes `transfer_organization_ownership(org_id, same_user_id)` | Aborts with `P0003` or `P0004`; does NOT return `no_change_same_user`. |
-| **SEC-21** | **Active Organization Gate on Invitation** | Accept invitation to a closed organization | Returns `ORGANIZATION_CLOSED`; membership NOT created. |
+| **SEC-07** | **Closure Audit Trail** | Owner closes store with matching confirmation name | Sets `is_active = false`, records `closed_at` and `closed_by`. |
+| **SEC-08** | **Universal Forced RLS** | Concurrent queries across all tenant tables under `FORCE RLS` | Queries execute under `authenticated` without PostgreSQL recursion errors. |
+| **SEC-09** | **Audit Event Immutability** | Client executes direct `INSERT`, `UPDATE`, or `DELETE` on `organization_audit_events` | Rejected by RLS; 0 rows affected. |
+| **SEC-10** | **Cross-Tenant URL Isolation** | User A accesses `/[org-b-slug]/dashboard` | Gated by `getTenantContext()`; renders `404 Not Found` (anti-enumeration). |
+| **SEC-11** | **Suspended Member Workspace Access** | Suspended user attempts access to tenant workspace | Gated by `getTenantContext()`; renders `404 Not Found`. |
+| **SEC-12** | **Closed Org Workspace Access** | User attempts access to closed organization workspace | Gated by `getTenantContext()`; renders `404 Not Found`. |
+| **SEC-13** | **Active Org Cookie Manipulation** | User manipulates `bizflow_active_org` cookie to unauthorized org ID | Server action and context resolver reject cookie and route to authorized fallback. |
+| **SEC-14** | **Atomic Recovery Nonce Replay** | Concurrent requests submit password reset with identical recovery grant | PostgreSQL row lock consumes nonce atomically; exactly 1 succeeds, second fails with `UNAUTHORIZED_RECOVERY`. |
+| **SEC-15** | **Cryptographic Recovery Verification** | Attacker tampers with recovery grant or JWT token | `supabase.auth.getUser()` verifies signature with GoTrue; fails with `unauthorized`. |
+| **SEC-16** | **Authoritative Profile Source** | Update user profile while GoTrue user_metadata sync fails | `public.profiles` updates authoritatively; metadata sync failure logged as warning without rollback. |
 
 ---
 
-## 6. Automated Testing
+## 6. Automated Verification Gates
+
+Execute all seven verification gates before shipping:
 
 ```bash
-# Run unit & schema tests (Zod validation, token hashing, ISO code rules)
-npm run test
+# 1. Clean Database Reset
+npx supabase db reset
 
-# Run RLS tenant isolation, locking, and trigger integration tests in Supabase emulator
+# 2. Strict TypeScript Typecheck (Zero bypasses)
+npm run typecheck
+
+# 3. Code Style & Linting
+npm run lint
+
+# 4. Unit Test Suite (98 tests across 10 suites)
+npm run test:unit
+
+# 5. Integration Test Suite (125 tests across 11 suites)
 npm run test:integration
 
-# Run Playwright end-to-end browser tests
-npm run test:e2e
+# 6. Playwright End-to-End Tests (30 tests across 5 suites)
+npx playwright test
+
+# 7. Production Build Verification
+npm run build
 ```
