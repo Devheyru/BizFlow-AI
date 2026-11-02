@@ -1,8 +1,11 @@
+import "server-only";
+
 import { createHmac, createHash, timingSafeEqual, randomBytes } from "crypto";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { NextResponse } from "next/server";
 import { getSafeCookieStore } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
+import { validateRecoveryGrantSecret } from "@/lib/env";
 
 export const RECOVERY_COOKIE_NAME = "bizflow_recovery_grant";
 export const RECOVERY_GRANT_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -19,12 +22,12 @@ export type RecoveryVerificationResult =
   | { success: true; payload: RecoveryGrantPayload }
   | { success: false; reason: "missing" | "invalid" | "expired" | "unauthorized" };
 
-function getSigningSecret(): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_JWT_SECRET;
-  if (!secret) {
-    throw new Error("Server secret for recovery grant signing is not configured.");
-  }
-  return secret;
+/**
+ * Returns the dedicated server-only secret for password recovery HMAC signing.
+ * Fails securely if RECOVERY_GRANT_SECRET is missing or shorter than 32 characters.
+ */
+export function getSigningSecret(): string {
+  return validateRecoveryGrantSecret();
 }
 
 /**
@@ -42,6 +45,7 @@ export function createRecoveryGrant(
   sessionId: string,
   customTtlMs?: number
 ): string {
+  const secret = getSigningSecret();
   const issuedAt = Date.now();
   const ttl = customTtlMs ?? RECOVERY_GRANT_TTL_MS;
   const expiresAt = issuedAt + ttl;
@@ -56,7 +60,7 @@ export function createRecoveryGrant(
   };
 
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = createHmac("sha256", getSigningSecret())
+  const signature = createHmac("sha256", secret)
     .update(payloadB64)
     .digest("base64url");
 
@@ -146,8 +150,11 @@ export function verifyRecoveryGrant(
     return { success: false, reason: "invalid" };
   }
 
+  // Strictly enforce server configuration before attempting verification
+  const secret = getSigningSecret();
+
   try {
-    const expectedSig = createHmac("sha256", getSigningSecret())
+    const expectedSig = createHmac("sha256", secret)
       .update(payloadB64)
       .digest("base64url");
 

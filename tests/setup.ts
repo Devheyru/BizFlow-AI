@@ -1,6 +1,10 @@
 import "@testing-library/jest-dom";
+import { vi } from "vitest";
 import fs from "fs";
 import path from "path";
+
+// Mock server-only in Vitest JSDOM test runner
+vi.mock("server-only", () => ({}));
 
 // Load .env.local into process.env for local integration tests
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -18,6 +22,11 @@ if (fs.existsSync(envPath)) {
       }
     }
   }
+}
+
+// Fallback test secret if not set in .env.local
+if (!process.env.RECOVERY_GRANT_SECRET) {
+  process.env.RECOVERY_GRANT_SECRET = "bizflow-test-recovery-grant-secret-at-least-32-chars";
 }
 
 // Polyfill/stub BroadcastChannel in test environment to avoid Node 22 / JSDOM MessageEvent collision

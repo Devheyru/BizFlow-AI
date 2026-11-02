@@ -10,7 +10,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Vitest](https://img.shields.io/badge/Vitest-3.0.4-6E9F18?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Playwright](https://img.shields.io/badge/Playwright-1.50.1-2EAD33?style=flat&logo=playwright&logoColor=white)](https://playwright.dev/)
-[![Tests Passing](https://img.shields.io/badge/Tests-253_Passing-brightgreen?style=flat)](#testing-and-verification)
+[![Tests Passing](https://img.shields.io/badge/Tests-278_Passing-brightgreen?style=flat)](#testing-and-verification)
 [![Status](https://img.shields.io/badge/Status-Feature_001_Complete-success?style=flat)](#current-development-status)
 
 ---
@@ -79,6 +79,7 @@ All 65 tasks across Feature 001 are fully implemented and verified against autom
   - In-app authenticated password updates requiring current password verification and revoking other active sessions.
   - Cryptographically verified password recovery flow utilizing Supabase Auth AMR claims.
   - Atomic single-use recovery nonce tracking in PostgreSQL preventing concurrent replay attacks.
+  - Dedicated `RECOVERY_GRANT_SECRET` cryptographically isolating recovery tokens from Supabase keys.
   - Global session revocation upon password reset across all active user devices.
 
 > **Note on Scope**: Feature modules for employee invitations, inventory management, POS sales, invoicing, expenses, and AI analytics are planned for subsequent milestones and are not yet active in this repository.
@@ -211,8 +212,8 @@ The platform adheres to non-negotiable security requirements defined in the BizF
    The recovery pipeline validates authentication sessions using `supabase.auth.getUser()`, requiring the Supabase Auth server to cryptographically verify token signatures, expiry, and AMR (`method: "recovery"`) claims.
 8. **Decoupled Authoritative Profile Store**:
    `public.profiles` is the authoritative source of record for user profiles. Synchronization with Supabase Auth `user_metadata` is handled best-effort with non-fatal logging, eliminating distributed two-phase rollback hazards.
-9. **Zero Service-Role Exposure**:
-   `SUPABASE_SERVICE_ROLE_KEY` is never referenced in client-side bundles or client components. Client operations strictly use the Supabase Anon key combined with verified HTTP-only session cookies.
+9. **Dedicated Secrets & Zero Service-Role Exposure**:
+   `RECOVERY_GRANT_SECRET` is a dedicated, server-only 256-bit secret (min 32 characters) used exclusively for signing and verifying recovery grants. `SUPABASE_SERVICE_ROLE_KEY` is never used as a recovery fallback and is never referenced in client-side bundles or client components. Client operations strictly use the Supabase Anon key combined with verified HTTP-only session cookies.
 10. **Clean Production Surface**:
     Temporary development/testing RPCs (such as `demote_member_role_for_testing`) are permanently dropped from the database schema.
 
@@ -426,6 +427,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Supabase Service Role Key (Server-only; used for integration test seeding; NEVER exposed to browser)
 SUPABASE_SERVICE_ROLE_KEY=your-local-service-role-key
+
+# Dedicated Server-Only Recovery Secret (min 32 characters; NEVER exposed to browser)
+RECOVERY_GRANT_SECRET=bizflow-local-recovery-grant-secret-at-least-32-chars-long
 ```
 
 > **Warning**: Never commit `.env.local` to version control. The repository's `.gitignore` explicitly excludes all `.env*.local` files.
@@ -457,6 +461,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to view the 
 | `NEXT_PUBLIC_SUPABASE_URL` | Public / Browser | URL of the Supabase API Gateway | **Yes** | `http://127.0.0.1:54321` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public / Browser | Anonymous API key safe for browser client requests | **Yes** | — |
 | `NEXT_PUBLIC_APP_URL` | Public / Browser | Root URL of the Next.js app for auth callbacks | No | `http://localhost:3000` |
+| `RECOVERY_GRANT_SECRET` | Server-Only | Dedicated 256-bit secret (min 32 chars) for recovery token HMAC signing | **Yes** | — |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-Only | Privileged admin key for integration test harness seeding | **Yes** (Tests) | — |
 
 ---
@@ -498,17 +503,17 @@ npm run test:e2e
 
 ## Testing and Verification
 
-BizFlow AI maintains a comprehensive, three-tier automated verification architecture. All 253 automated tests pass cleanly:
+BizFlow AI maintains a comprehensive, three-tier automated verification architecture. All 278 automated tests pass cleanly:
 
 ```text
 ================================================================================
 Test Category         Runner      Scope                            Count   Result
 ================================================================================
-Unit Tests            Vitest      Schemas, utilities, components    98     PASS
+Unit Tests            Vitest      Schemas, utilities, components   123     PASS
 Integration Tests     Vitest      Real Supabase JWT / RLS checks   125     PASS
 End-to-End Tests      Playwright  Full browser user journeys        30     PASS
 ────────────────────────────────────────────────────────────────────────────────
-Total Automated Tests Passing:                                     253     PASS
+Total Automated Tests Passing:                                     278     PASS
 ================================================================================
 ```
 
@@ -516,6 +521,7 @@ Total Automated Tests Passing:                                     253     PASS
 - Validates Zod boundary schemas: registration, sign-in, ISO country/currency rules, profile edits, password complexity.
 - Tests foundational UI primitives (`Button`, `Card`, `Input`, `Form`, `Alert`).
 - Tests environment variable validation and safe redirect URL sanitization.
+- Tests dedicated recovery grant secret isolation: enforces minimum 32 characters, prevents fallback to other keys, and verifies token minting and signature validation.
 
 ### 2. Integration Tests (`npm run test:integration`)
 - Executes against the live local PostgreSQL instance using real Supabase JWT sessions.
@@ -582,4 +588,3 @@ This project is currently private and does not have an open-source license assig
 ## Summary
 
 BizFlow AI is engineered from the ground up for high reliability, strict multi-tenant security, and scalable retail operations. With Feature 001 complete, the platform provides a verified foundation for upcoming business management and AI-assisted workflows.
-
