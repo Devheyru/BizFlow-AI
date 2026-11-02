@@ -1,4 +1,4 @@
-
+﻿
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
@@ -115,14 +115,34 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"recovery_grants": {
+                  Row: {
+                    "consumed_at": string | null,"created_at": string,"expires_at": string,"id": string,"nonce_hash": string,"session_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "consumed_at"?: string | null,"created_at"?: string,"expires_at": string,"id"?: string,"nonce_hash": string,"session_id": string,"user_id": string
+                  }
+                  Update: {
+                    "consumed_at"?: string | null,"created_at"?: string,"expires_at"?: string,"id"?: string,"nonce_hash"?: string,"session_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {
             [_ in never]: never
           }
           Functions: {
-            "create_organization_with_owner":
+            "consume_recovery_grant":
+{ Args: { "p_nonce_hash": string,"p_user_id"?: string }; Returns: boolean
+                           },
+"create_organization_with_owner":
 { Args: { "p_address"?: string,"p_business_type": string,"p_client_mutation_id": string,"p_country": string,"p_currency": string,"p_email"?: string,"p_name": string,"p_phone"?: string,"p_slug": string,"p_tax_id"?: string,"p_timezone": string }; Returns: Json
+                           },
+"create_recovery_grant":
+{ Args: { "p_expires_at": string,"p_nonce_hash": string,"p_session_id": string,"p_user_id"?: string }; Returns: string
                            },
 "get_user_organization_ids":
 { Args: Record<PropertyKey, never>; Returns: string[]
@@ -132,6 +152,9 @@ isOneToOne: false
                            },
 "is_org_member":
 { Args: { "p_org_id": string,"p_roles"?: (Database["public"]['Enums']["app_role"])[] }; Returns: boolean
+                           },
+"verify_recovery_grant":
+{ Args: { "p_nonce_hash": string,"p_user_id"?: string }; Returns: boolean
                            }
           }
           Enums: {

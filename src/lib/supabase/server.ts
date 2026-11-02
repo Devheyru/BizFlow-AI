@@ -6,6 +6,13 @@ import type { Database } from "@/types/database";
 const inMemoryCookieJar = new Map<string, string>();
 
 /**
+ * Resets the in-memory cookie store for test isolation.
+ */
+export function clearInMemoryCookieJar() {
+  inMemoryCookieJar.clear();
+}
+
+/**
  * Safely retrieves the Next.js cookie store, or falls back to an in-memory store
  * when running within test harnesses outside an active Next.js request scope.
  */

@@ -20,7 +20,13 @@ import type {
   SignInResult,
   SignOutResult,
   PasswordResetResult,
+  ResetPasswordExecutionResult,
 } from "@/types/auth";
+import {
+  validateRecoveryAuthorization,
+  consumeRecoveryGrant,
+  clearRecoveryGrant,
+} from "@/lib/auth/recovery";
 
 /**
  * Register a new user with password complexity and anti-enumeration safeguards (FR-001, FR-002).
@@ -402,10 +408,11 @@ export async function requestPasswordResetAction(
 
 /**
  * Update user password using the authenticated recovery session.
+ * Requires an active, server-validated recovery authorization grant and AMR.
  */
 export async function resetPasswordAction(
   rawInput: ResetPasswordInput
-): Promise<ActionResult<{ redirectUrl: string }>> {
+): Promise<ActionResult<ResetPasswordExecutionResult>> {
   const parseResult = resetPasswordSchema.safeParse(rawInput);
   if (!parseResult.success) {
     return {
@@ -422,16 +429,90 @@ export async function resetPasswordAction(
   const { newPassword } = parseResult.data;
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.updateUser({
+  // 1. Validate authenticated session
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!user || !session) {
+    return {
+      success: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: "You must have a valid recovery session to reset your password.",
+      },
+    };
+  }
+
+  // 2. Validate recovery-specific authorization
+  const authCheck = await validateRecoveryAuthorization(supabase, user.id, session);
+  if (!authCheck.success) {
+    let message = "Unauthorized password reset attempt. A valid recovery session is required.";
+    if (authCheck.reason === "expired") {
+      message = "Your password reset session has expired. Please request a new link.";
+    } else if (authCheck.reason === "invalid") {
+      message = "This password reset link has already been used or is invalid. Please request a new link.";
+    }
+
+    return {
+      success: false,
+      error: {
+        code: authCheck.reason === "expired" ? "RECOVERY_EXPIRED" : "UNAUTHORIZED_RECOVERY",
+        message,
+      },
+    };
+  }
+
+  // 3. Atomically consume the single-use recovery grant in PostgreSQL to prevent concurrent replay
+  const consumed = await consumeRecoveryGrant(
+    supabase,
+    authCheck.payload.nonce,
+    user.id
+  );
+
+  if (!consumed) {
+    return {
+      success: false,
+      error: {
+        code: "UNAUTHORIZED_RECOVERY",
+        message: "This password reset link has already been used or expired. Please request a new link.",
+      },
+    };
+  }
+
+  // 4. Update password
+  const { error: updateError } = await supabase.auth.updateUser({
     password: newPassword,
   });
 
-  if (error) {
+  if (updateError) {
     return {
       success: false,
       error: {
         code: "RESET_FAILED",
-        message: error.message || "Failed to update password. Please request a new link.",
+        message: "Failed to update password. Please request a new reset link.",
+      },
+    };
+  }
+
+  // 5. Invalidate single-use recovery grant cookie immediately
+  await clearRecoveryGrant();
+
+  // 6. Revoke all active sessions across devices upon password reset (FR-006, T053)
+  const { error: signOutError } = await supabase.auth.signOut({ scope: "global" });
+
+  if (signOutError) {
+    console.error("[resetPasswordAction] Global session revocation warning:", signOutError);
+    return {
+      success: true,
+      data: {
+        redirectUrl: "/sign-in?reset=success&revocation=failed",
+        revocationStatus: "failed",
+        warning: "Your password was updated, but revoking other active sessions failed.",
       },
     };
   }
@@ -440,6 +521,7 @@ export async function resetPasswordAction(
     success: true,
     data: {
       redirectUrl: "/sign-in?reset=success",
+      revocationStatus: "revoked",
     },
   };
 }

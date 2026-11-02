@@ -179,20 +179,20 @@ To ensure consistent implementation across all tasks, the system strictly enforc
 ### Tests for User Story 5 Ã¢Å¡Â Ã¯Â¸Â
 *(Note: Tests authored here; executed in T058 after profile actions and pages exist)*
 
-- [ ] T048 [P] [US5] Author unit tests for forgot-password, reset-password, and profile update Zod schemas in tests/unit/validations/profile-password.test.ts
-- [ ] T049 [P] [US5] Author integration tests verifying profiles_update_own RLS policy permits updating own profile only in tests/integration/profile-rls.test.ts
-- [ ] T050 [P] [US5] Author integration tests verifying password reset triggers Supabase session revocation across all existing client sessions in tests/integration/session-revocation.test.ts
+- [X] T048 [P] [US5] Author unit tests for forgot-password, reset-password, and profile update Zod schemas in tests/unit/validations/profile-password.test.ts
+- [X] T049 [P] [US5] Author integration tests verifying profiles_update_own RLS policy permits updating own profile only in tests/integration/profile-rls.test.ts
+- [X] T050 [P] [US5] Author integration tests verifying password reset triggers Supabase session revocation across all existing client sessions in tests/integration/session-revocation.test.ts
 
 ### Implementation for User Story 5
 
-- [ ] T051 [P] [US5] Define password recovery and profile Zod schemas (forgotPasswordSchema, resetPasswordSchema, updateProfileSchema) in src/lib/validations/auth.ts
-- [ ] T052 [US5] Implement server action requestPasswordResetAction with anti-enumeration response in src/actions/auth-actions.ts
-- [ ] T053 [US5] Implement server action resetPasswordAction updating credentials and triggering refresh token revocation in src/actions/auth-actions.ts
-- [ ] T054 [US5] Implement server action updateProfileAction for personal name and phone modifications in src/actions/profile-actions.ts
-- [ ] T055 [P] [US5] Build Forgot Password page and form in src/app/(auth)/forgot-password/page.tsx and src/components/auth/ForgotPasswordForm.tsx
-- [ ] T056 [P] [US5] Build Reset Password page and form in src/app/(auth)/reset-password/page.tsx and src/components/auth/ResetPasswordForm.tsx
-- [ ] T057 [P] [US5] Build User Profile settings page and form in src/app/settings/profile/page.tsx and src/components/settings/ProfileForm.tsx
-- [ ] T058 [US5] Execute unit, integration, and end-to-end browser tests for password recovery, session revocation, and profile editing in tests/e2e/profile-password.spec.ts
+- [X] T051 [P] [US5] Define password recovery and profile Zod schemas (forgotPasswordSchema, resetPasswordSchema, updateProfileSchema) in src/lib/validations/auth.ts
+- [X] T052 [US5] Implement server action requestPasswordResetAction with anti-enumeration response in src/actions/auth-actions.ts
+- [X] T053 [US5] Implement server action resetPasswordAction updating credentials and triggering refresh token revocation in src/actions/auth-actions.ts
+- [X] T054 [US5] Implement server action updateProfileAction for personal name and phone modifications in src/actions/profile-actions.ts
+- [X] T055 [P] [US5] Build Forgot Password page and form in src/app/(auth)/forgot-password/page.tsx and src/components/auth/ForgotPasswordForm.tsx
+- [X] T056 [P] [US5] Build Reset Password page and form in src/app/(auth)/reset-password/page.tsx and src/components/auth/ResetPasswordForm.tsx
+- [X] T057 [P] [US5] Build User Profile settings page and form in src/app/settings/profile/page.tsx and src/components/settings/ProfileForm.tsx
+- [X] T058 [US5] Execute unit, integration, and end-to-end browser tests for password recovery, session revocation, and profile editing in tests/e2e/profile-password.spec.ts
 
 **Checkpoint**: User self-service account management and recovery is complete.
 

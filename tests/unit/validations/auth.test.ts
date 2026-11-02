@@ -153,9 +153,19 @@ describe("T014: Authentication Validation Schemas", () => {
       expect(forgotPasswordSchema.safeParse({ email: "invalid" }).success).toBe(false);
     });
 
-    it("validates resetPasswordSchema using passwordSchema rules", () => {
-      expect(resetPasswordSchema.safeParse({ newPassword: "Valid123!Password" }).success).toBe(true);
-      expect(resetPasswordSchema.safeParse({ newPassword: "weak" }).success).toBe(false);
+    it("validates resetPasswordSchema using passwordSchema rules and required confirmation", () => {
+      expect(
+        resetPasswordSchema.safeParse({
+          newPassword: "Valid123!Password",
+          confirmPassword: "Valid123!Password",
+        }).success
+      ).toBe(true);
+      // Rejects missing confirmPassword
+      expect(resetPasswordSchema.safeParse({ newPassword: "Valid123!Password" }).success).toBe(false);
+      // Rejects weak password
+      expect(
+        resetPasswordSchema.safeParse({ newPassword: "weak", confirmPassword: "weak" }).success
+      ).toBe(false);
     });
   });
 });

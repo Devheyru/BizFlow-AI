@@ -1,5 +1,6 @@
 import React from "react";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Settings } from "lucide-react";
 import { signOutAction } from "@/actions/auth-actions";
 import { Button } from "@/components/ui/button";
 import { OrganizationSwitcher } from "@/components/layout/OrganizationSwitcher";
@@ -39,6 +40,15 @@ export function TenantHeader({
               {user.email}
             </span>
           </div>
+
+          <Link
+            href="/settings/profile"
+            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            title="Account Settings"
+            aria-label="Account Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
 
           <form
             action={async () => {
