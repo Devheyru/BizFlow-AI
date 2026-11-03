@@ -224,6 +224,32 @@ describe("T036: resolveTenantContext Unit Tests", () => {
             }),
           };
         }
+        if (table === "permissions") {
+          return {
+            select: vi.fn().mockResolvedValue({
+              data: [
+                { id: "employees:read" },
+                { id: "employees:invite" },
+                { id: "employees:update_role" },
+                { id: "employees:suspend" },
+                { id: "employees:remove" },
+                { id: "employees:invitations_read" },
+                { id: "employees:invitations_revoke" },
+              ],
+              error: null,
+            }),
+          };
+        }
+        if (table === "role_permissions") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({
+                data: [{ permission_id: "employees:read" }],
+                error: null,
+              }),
+            }),
+          };
+        }
         return {};
       }),
     } as unknown as SupabaseClient;
@@ -249,6 +275,96 @@ describe("T036: resolveTenantContext Unit Tests", () => {
       expect(result.context.role).toBe("owner");
       expect(result.context.user.id).toBe("u-1");
       expect(result.context.activeOrganizations).toHaveLength(1);
+      expect(result.context.permissions).toContain("employees:read");
+    }
+  });
+
+  it("fails closed (forbidden) when database permission query returns an error", async () => {
+    const mockOrg = {
+      id: "org-1",
+      name: "Store 1",
+      slug: "store-1",
+      business_type: "Retail",
+      country: "US",
+      currency: "USD",
+      timezone: "America/New_York",
+      is_active: true,
+    };
+    const mockMembership = {
+      id: "mem-2",
+      organization_id: "org-1",
+      user_id: "u-2",
+      role: "admin",
+      status: "active",
+    };
+
+    const mockClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: {
+            user: { id: "u-2", email: "admin@example.com", email_confirmed_at: "2026-10-31" },
+          },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "organizations") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({ data: mockOrg, error: null }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "organization_memberships") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockReturnValue({
+                    maybeSingle: vi.fn().mockResolvedValue({ data: mockMembership, error: null }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "role_permissions") {
+          // Simulate database query failure / RLS denial
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({
+                data: null,
+                error: { code: "42501", message: "permission denied for table role_permissions" },
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as SupabaseClient;
+
+    vi.mocked(guards.getUserActiveOrganizations).mockResolvedValue([
+      {
+        id: "org-1",
+        name: "Store 1",
+        slug: "store-1",
+        businessType: "Retail",
+        country: "US",
+        currency: "USD",
+        timezone: "America/New_York",
+        isActive: true,
+        role: "admin",
+      },
+    ]);
+
+    const result = await resolveTenantContext("store-1", { supabaseClient: mockClient });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("forbidden");
     }
   });
 });

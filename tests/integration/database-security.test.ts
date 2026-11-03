@@ -278,6 +278,21 @@ describe("T020: Database Security Posture & Hardening Verification (FR-008, FR-0
 
       expect(error).toBeDefined();
     });
+
+    it("restricts check_user_permission: authenticated user cannot probe another user's permissions (returns false)", async () => {
+      const fakeOrgId = "00000000-0000-0000-0000-000000000001";
+      const otherUserId = "00000000-0000-0000-0000-000000000002";
+
+      // Direct RPC invocation by testUserId attempting to probe otherUserId's authorization info
+      const { data, error } = await authenticatedClient.rpc("check_user_permission", {
+        p_org_id: fakeOrgId,
+        p_user_id: otherUserId,
+        p_permission: "employees:read",
+      });
+
+      expect(error).toBeNull();
+      expect(data).toBe(false);
+    });
   });
 });
 

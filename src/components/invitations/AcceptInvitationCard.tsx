@@ -154,14 +154,14 @@ export function AcceptInvitationCard({
         </div>
 
         <div className="space-y-3">
-          <Link href={`/sign-in?returnTo=${encodeURIComponent(returnUrl)}`} className="w-full block">
+          <Link href={`/sign-in?next=${encodeURIComponent(returnUrl)}`} className="w-full block">
             <Button className="w-full gap-2">
               <LogIn className="h-4 w-4" />
               <span>Sign In with Invited Email</span>
             </Button>
           </Link>
 
-          <Link href={`/sign-up?pendingInviteToken=${token}`} className="w-full block">
+          <Link href={`/sign-up?token=${token}`} className="w-full block">
             <Button variant="outline" className="w-full gap-2">
               <UserCheck className="h-4 w-4" />
               <span>Create New Account</span>
@@ -245,7 +245,7 @@ export function AcceptInvitationCard({
             </div>
           </div>
           <Link
-            href={`/sign-in?returnTo=${encodeURIComponent(`/invitations/accept?token=${token}`)}`}
+            href={`/sign-in?next=${encodeURIComponent(`/invitations/accept?token=${token}`)}`}
             className="block"
           >
             <Button variant="outline" size="sm" className="w-full text-xs">

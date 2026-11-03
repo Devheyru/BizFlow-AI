@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUserActiveOrganizations } from "@/lib/auth/guards";
-import { SYSTEM_PERMISSIONS, ROLE_PERMISSIONS } from "@/lib/auth/permissions";
-import type { TenantContext, PermissionKey, AppRole } from "@/types/auth";
+import type { TenantContext, PermissionKey } from "@/types/auth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type TenantResolutionError =
@@ -86,23 +85,29 @@ export async function resolveTenantContext(
   }
 
   // 6. Authoritative Permission Resolution (FR-033, FR-034, Principle IV)
+  // Evaluates directly against the database with fail-closed semantics
   let permissions: PermissionKey[] = [];
   if (membership.role === "owner") {
-    // Owner dynamically receives all registered permissions in the catalog
-    permissions = [...SYSTEM_PERMISSIONS];
+    // Owner dynamically receives all registered permissions from the catalog
+    const { data: dbPerms, error: permsErr } = await supabase
+      .from("permissions")
+      .select("id");
+
+    if (permsErr || !dbPerms) {
+      return { ok: false, error: "forbidden" };
+    }
+    permissions = dbPerms.map((p) => p.id as PermissionKey);
   } else {
-    // Non-owner roles evaluate from role_permissions schema
+    // Non-owner roles evaluate from role_permissions schema in the database
     const { data: rolePerms, error: rolePermsErr } = await supabase
       .from("role_permissions")
       .select("permission_id")
       .eq("role", membership.role);
 
-    const callerRole = membership.role as AppRole;
-    if (!rolePermsErr && rolePerms && rolePerms.length > 0) {
-      permissions = rolePerms.map((rp) => rp.permission_id as PermissionKey);
-    } else {
-      permissions = [...(ROLE_PERMISSIONS[callerRole] || [])];
+    if (rolePermsErr || !rolePerms) {
+      return { ok: false, error: "forbidden" };
     }
+    permissions = rolePerms.map((rp) => rp.permission_id as PermissionKey);
   }
 
   return {

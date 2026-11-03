@@ -222,6 +222,13 @@ AS $$
 DECLARE
     v_role public.app_role;
 BEGIN
+    -- 0. Authorization Guard: Direct authenticated callers can only evaluate their own permissions.
+    -- Prevents probing another user's authorization/role status or organization membership.
+    -- Internal calls within the same session pass v_caller_id (auth.uid()), and service_role is trusted.
+    IF auth.uid() IS NOT NULL AND auth.role() = 'authenticated' AND p_user_id != auth.uid() THEN
+        RETURN FALSE;
+    END IF;
+
     -- 1. Catalog Existence Requirement: The evaluated permission key MUST exist in public.permissions
     IF NOT EXISTS (SELECT 1 FROM public.permissions WHERE id = p_permission) THEN
         RETURN FALSE;
@@ -282,6 +289,7 @@ DECLARE
     v_existing_inv_id UUID;
     v_existing_expires_at TIMESTAMPTZ;
     v_invitation_id UUID;
+    v_existing_member_status public.membership_status;
 BEGIN
     -- 1. Authentication Check
     v_caller_id := auth.uid();
@@ -344,16 +352,18 @@ BEGIN
         RAISE EXCEPTION 'Admins cannot invite users with the Owner role' USING ERRCODE = 'P0020';
     END IF;
 
-    -- 7. Existing Active Member Check
-    IF EXISTS (
-        SELECT 1
-        FROM public.organization_memberships m
-        JOIN auth.users u ON u.id = m.user_id
-        WHERE m.organization_id = p_org_id
-          AND m.status = 'active'
-          AND lower(trim(u.email)) = v_clean_email
-    ) THEN
+    -- 7. Existing Member Lifecycle Check
+    SELECT m.status INTO v_existing_member_status
+    FROM public.organization_memberships m
+    JOIN auth.users u ON u.id = m.user_id
+    WHERE m.organization_id = p_org_id
+      AND lower(trim(u.email)) = v_clean_email;
+
+    IF v_existing_member_status = 'active' THEN
         RAISE EXCEPTION 'User is already an active member of this organization' USING ERRCODE = 'P0021';
+    ELSIF v_existing_member_status = 'suspended' THEN
+        RAISE EXCEPTION 'User is a suspended member of this organization' USING ERRCODE = 'P0027';
+    -- Revoked memberships do not block reinvitation: a removed user may rejoin via a new invitation.
     END IF;
 
     -- 8. Existing Pending Invitation Handling (Concurrency-Safe Row Lock)
@@ -506,6 +516,8 @@ DECLARE
     v_caller_email TEXT;
     v_invite RECORD;
     v_org_slug TEXT;
+    v_existing_mem_id UUID;
+    v_existing_mem_status public.membership_status;
 BEGIN
     -- 1. Authentication Check
     v_caller_id := auth.uid();
@@ -567,7 +579,72 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'code', 'EMAIL_MISMATCH', 'message', 'The authenticated account does not match the invitation recipient.');
     END IF;
 
-    -- 8. Atomic Membership Creation & State Transition
+    -- 8. Existing Membership Lifecycle Validation & Controlled Rejoining
+    SELECT id, status INTO v_existing_mem_id, v_existing_mem_status
+    FROM public.organization_memberships
+    WHERE organization_id = v_invite.organization_id
+      AND user_id = v_caller_id
+    FOR UPDATE;
+
+    IF v_existing_mem_status IS NOT NULL THEN
+        IF v_existing_mem_status = 'active' THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'code', 'ALREADY_ACTIVE_MEMBER',
+                'message', 'You are already an active member of this organization.'
+            );
+        ELSIF v_existing_mem_status = 'suspended' THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'code', 'MEMBERSHIP_SUSPENDED',
+                'message', 'Your membership in this organization is currently suspended.'
+            );
+        ELSIF v_existing_mem_status = 'revoked' THEN
+            -- Controlled, audited rejoining: transition existing membership from revoked to active
+            UPDATE public.organization_memberships
+            SET role = v_invite.role,
+                status = 'active',
+                updated_at = now()
+            WHERE id = v_existing_mem_id;
+
+            UPDATE public.organization_invitations
+            SET status = 'accepted', updated_at = now()
+            WHERE id = v_invite.id;
+
+            -- Audit Logging: employee.joined with rejoining metadata
+            INSERT INTO public.organization_audit_events (
+                organization_id,
+                actor_id,
+                event_type,
+                metadata
+            ) VALUES (
+                v_invite.organization_id,
+                v_caller_id,
+                'employee.joined',
+                jsonb_build_object(
+                    'invitation_id', v_invite.id,
+                    'email', v_invite.email,
+                    'role', v_invite.role,
+                    'rejoined', true,
+                    'previous_status', 'revoked'
+                )
+            );
+
+            SELECT slug INTO v_org_slug
+            FROM public.organizations
+            WHERE id = v_invite.organization_id;
+
+            RETURN jsonb_build_object(
+                'success', true,
+                'organization_id', v_invite.organization_id,
+                'organization_slug', v_org_slug,
+                'role', v_invite.role,
+                'status', 'active'
+            );
+        END IF;
+    END IF;
+
+    -- 9. Atomic Membership Creation & State Transition (for new members)
     INSERT INTO public.organization_memberships (
         organization_id,
         user_id,
@@ -578,17 +655,13 @@ BEGIN
         v_caller_id,
         v_invite.role,
         'active'
-    )
-    ON CONFLICT (user_id, organization_id) DO UPDATE
-    SET role = EXCLUDED.role,
-        status = 'active',
-        updated_at = now();
+    );
 
     UPDATE public.organization_invitations
     SET status = 'accepted', updated_at = now()
     WHERE id = v_invite.id;
 
-    -- 9. Audit Logging: employee.joined
+    -- 10. Audit Logging: employee.joined
     INSERT INTO public.organization_audit_events (
         organization_id,
         actor_id,

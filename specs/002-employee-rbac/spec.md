@@ -16,13 +16,14 @@
 1. **Permission Naming Convention**:
    - In alignment with Constitutional Principle IV, all permission identifiers MUST strictly use colon-separated resource-action verbs: `<resource>:<action>` (e.g., `employees:read`, `employees:invite`, `employees:update_role`, `employees:suspend`, `employees:remove`, `employees:invitations_read`, `employees:invitations_revoke`).
    - Dot notation is replaced across all requirements, scenarios, permission matrices, and future module references.
-2. **Membership Removal Strategy (Soft Revocation & Terminal State)**:
+2. **Membership Removal Strategy (Soft Revocation, Terminal State & Rejoining Flow)**:
    - Employee removal MUST set `organization_memberships.status` to `'revoked'`.
-   - Permitted membership status transitions:
+   - Permitted direct membership status transitions:
      - `active` $\leftrightarrow$ `suspended` (Suspension and Reactivation)
      - `active` $\rightarrow$ `revoked` (Removal)
      - `suspended` $\rightarrow$ `revoked` (Removal from suspended state)
-   - In Feature 002, `status = 'revoked'` is strictly terminal. Any attempt to update the role (`update_organization_member_role`) or status (`update_organization_member_status`) on a revoked membership MUST be rejected with error `P0025` ("Cannot modify a revoked membership").
+   - In Feature 002, `status = 'revoked'` is strictly terminal for direct member modifications: any direct attempt to update the role (`update_organization_member_role`) or status (`update_organization_member_status`) on a revoked membership MUST be rejected with error `P0025` ("Cannot modify a revoked membership. Revocation is terminal.").
+   - Rejoining Policy: A previously removed/revoked user may rejoin the organization ONLY through a new, explicit invitation issued by an authorized caller (`create_organization_invitation`) and accepted by the invited user (`accept_organization_invitation`). Upon acceptance, the existing membership record is atomically transitioned to `status = 'active'` with the invited `role`, and an immutable `employee.joined` audit event is recorded with rejoining metadata (`rejoined: true, previous_status: 'revoked'`).
    - Hard deletion of membership records is strictly OUT OF SCOPE to maintain referential integrity with historical audit logs and retail transaction records.
    - Removing an employee MUST NOT revoke the user's global Supabase authentication session and MUST NOT affect their active memberships in other organizations.
    - On all subsequent requests, tenant context resolution (`resolveTenantContext()`) and database security helpers (`get_user_organization_ids()`) filter exclusively for `status = 'active'`, causing removed/revoked members to immediately fail tenant authorization (HTTP 404/403).

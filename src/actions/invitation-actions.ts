@@ -89,6 +89,7 @@ const KNOWN_ERROR_MESSAGES: Record<string, string> = {
   P0021: "User is already an active member of this organization.",
   P0022: "An active invitation is already pending for this email address.",
   P0026: "Cannot resend an accepted, declined, or revoked invitation.",
+  P0027: "User is a suspended member of this organization.",
 };
 
 // ============================================================================

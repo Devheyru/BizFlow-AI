@@ -50,7 +50,10 @@ SET search_path = pg_catalog, public, pg_temp;
 2. Caller must hold an active membership (`status = 'active'`) in active organization `p_org_id` (`is_active = true`) (Error: `P0004` - Not an active member).
 3. Caller must possess `employees:invite` permission (Owner or Admin) (Error: `P0005` - Insufficient permission).
 4. **Privilege Escalation Prevention**: If caller holds `admin` role, `p_role` MUST NOT be `'owner'` (Error: `P0020` - Admins cannot invite Owners).
-5. **Existing Active Member Check**: `p_email` must not match any user who currently holds an `active` membership in `p_org_id` (Error: `P0021` - User is already an active member).
+5. **Existing Member Lifecycle Check**:
+   - If `p_email` matches a user who currently holds an `active` membership in `p_org_id`, rejects with error `P0021` ("User is already an active member of this organization").
+   - If `p_email` matches a user who currently holds a `suspended` membership in `p_org_id`, rejects with error `P0027` ("User is a suspended member of this organization").
+   - If `p_email` matches a user who was previously `revoked`, issuing an invitation is permitted: a removed employee may rejoin an organization only through a new, explicit invitation.
 6. **Concurrent Duplicate Check**: Handled by pre-check and atomic trapping of `unique_violation` from partial unique index `uq_pending_invitation` on `(organization_id, lower(email)) WHERE status = 'pending'` (Error: `P0022` - An active invitation is already pending for this email address).
 
 ### Execution Privileges
@@ -146,10 +149,12 @@ SET search_path = pg_catalog, public, pg_temp;
    - If mismatched, returns:
      `{ "success": false, "code": "EMAIL_MISMATCH", "message": "The authenticated account does not match the invitation recipient." }`
    - *Privacy Rule*: Strictly omits expected or actual email addresses to prevent email enumeration or identity leakage.
-8. **Atomic Membership Creation & State Transition**:
-   - Inserts row into `public.organization_memberships` with `role = v_invite.role` and `status = 'active'`.
-   - Updates `organization_invitations` status to `'accepted'`.
-   - Inserts immutable audit event into `public.organization_audit_events` with `event_type = 'employee:joined'`.
+8. **Existing Membership Validation & Atomic Transition**:
+   - Checks if caller holds an existing membership in `v_invite.organization_id`:
+     - If `status = 'active'`: returns `{ "success": false, "code": "ALREADY_ACTIVE_MEMBER", "message": "You are already an active member of this organization." }`.
+     - If `status = 'suspended'`: returns `{ "success": false, "code": "MEMBERSHIP_SUSPENDED", "message": "Your membership in this organization is currently suspended." }`.
+     - If `status = 'revoked'`: controlled rejoining transitions the existing membership record to `status = 'active'`, updates `role = v_invite.role`, updates `updated_at = now()`, marks invitation `accepted`, and logs an immutable `employee.joined` audit event with metadata (`{ "rejoined": true, "previous_status": "revoked", "invitation_id": v_invite.id, "email": v_invite.email, "role": v_invite.role }`).
+   - If no prior membership exists: inserts new row into `public.organization_memberships` with `role = v_invite.role` and `status = 'active'`, marks invitation `accepted`, and logs an immutable `employee.joined` audit event.
 
 ### Execution Privileges
 ```sql

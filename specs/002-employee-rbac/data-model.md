@@ -278,7 +278,7 @@ All stored procedures use `SECURITY DEFINER`, lock search paths to `pg_catalog, 
 - **Validation**: `p_email` syntax (RFC 5322), `p_token_hash` (`^[a-f0-9]{64}$`), `p_expires_at` strictly bounded (`now() < p_expires_at AND p_expires_at <= now() + INTERVAL '7 days'`, enforcing a maximum invitation lifetime of exactly 7 days at the database boundary), `p_role` valid enum.
 - **Authorization**: Caller must be authenticated (`P0003`), active member of `p_org_id` (`P0004`), and hold `employees:invite` (`P0005`).
 - **Privilege Escalation**: If caller is Admin, `p_role` cannot be `'owner'` (`P0020`).
-- **Duplicate Checks**: Invitee cannot already be active member (`P0021`). Concurrent pending duplicates trapped via `uq_pending_invitation` returning `P0022`.
+- **Duplicate & Lifecycle Checks**: Invitee cannot already be an active member (`P0021`) or suspended member (`P0027`). Inviting a previously revoked user is permitted to support controlled rejoining. Concurrent pending duplicates trapped via `uq_pending_invitation` returning `P0022`.
 - **Audit**: Atomically records `employee:invited` in `organization_audit_events`.
 - **Grant**: `authenticated`.
 
@@ -292,8 +292,8 @@ All stored procedures use `SECURITY DEFINER`, lock search paths to `pg_catalog, 
 - **Validation & Locking**: Token hash format, `auth.uid() IS NOT NULL`, row lock `FOR UPDATE`.
 - **Transaction-Safe Lazy Expiration**: If `expires_at <= now()`, updates status to `'expired'`, commits cleanly without throwing rolling-back exceptions, and returns `{ "success": false, "code": "INVITATION_EXPIRED" }`.
 - **Email Mismatch Privacy**: Compares verified caller email with `lower(trim(invitation.email))`. If mismatched, returns generic `{ "success": false, "code": "EMAIL_MISMATCH", "message": "The authenticated account does not match the invitation recipient." }` without disclosing expected or actual emails.
-- **Membership Assignment**: Inserts row into `organization_memberships` (`status = 'active'`). Updates invitation `status = 'accepted'`.
-- **Audit**: Atomically records `employee:joined` in `organization_audit_events`.
+- **Controlled Rejoining & Membership Assignment**: If caller has an existing `revoked` membership, reactivates it to `status = 'active'` with the newly invited role. If caller has no prior membership, inserts a new row into `organization_memberships` (`status = 'active'`). Suspended (`MEMBERSHIP_SUSPENDED`) and active (`ALREADY_ACTIVE_MEMBER`) memberships are rejected. Updates invitation `status = 'accepted'`.
+- **Audit**: Atomically records `employee:joined` in `organization_audit_events` (including rejoining metadata when re-activating a revoked member).
 - **Grant**: `authenticated`.
 
 ### 4.4 `public.decline_organization_invitation(...)`
