@@ -1,22 +1,18 @@
 <!--
 Sync Impact Report
-Version change: 0.0.0 (Unratified Template) → 1.0.0
+Version change: 1.0.0 → 1.1.0
 List of modified principles:
-  - [PRINCIPLE_1_NAME] → I. Multi-Tenancy & Absolute Data Isolation (NON-NEGOTIABLE)
-  - [PRINCIPLE_2_NAME] → II. Financial Invariance & Traceable Retail Operations (NON-NEGOTIABLE)
-  - [PRINCIPLE_3_NAME] → III. Strict Type Safety & Modular Architecture
-  - [PRINCIPLE_4_NAME] → IV. Defense-in-Depth Security & Server-Enforced RBAC
-  - [PRINCIPLE_5_NAME] → V. Verified AI Integration & Critical Action Guardrails
-  - [Added] → VI. Professional UX & Operational Ergonomics
-  - [Added] → VII. Comprehensive Quality Verification & Test Integrity
-Added sections:
-  - Technical Baseline & Architectural Constraints (SECTION_2_NAME)
-  - Development Workflow, Quality Gates & SDD Governance (SECTION_3_NAME)
+  - Principle I: Multi-Tenancy & Absolute Data Isolation (clarified tenant switching to server-side context & membership revalidation)
+  - Principle II: Financial Invariance & Traceable Retail Operations (renamed Double-Entry Stock Tracking to Immutable Inventory Movement Ledger; clarified PostgreSQL transaction requirements and function usage)
+  - Principle IV: Defense-in-Depth Security & Server-Enforced RBAC (clarified parameterized queries for SQLi prevention, contextual output encoding/safe rendering & CSP for XSS prevention, and Zod normalization)
+  - Principle VII: Comprehensive Quality Verification & Test Integrity (focused unit testing on comprehensive critical business rules, boundaries, and invariants over vanity coverage)
+Added sections/subsections:
+  - Technical Baseline & Architectural Constraints: Added Subsection 5 (Mobile Architecture: Flutter Planned Companion Client) and versioned REST API in Subsection 2 (Backend & Persistence)
 Removed sections: None
 Templates requiring updates:
-  - .specify/memory/constitution.md (✅ ratified to v1.0.0)
-  - AGENTS.md (✅ updated to reference constitution)
-  - .specify/templates/plan-template.md (✅ aligned with constitution gates)
+  - .specify/memory/constitution.md (✅ amended to v1.1.0)
+  - AGENTS.md (✅ verified aligned with v1.1.0 core principles)
+  - .specify/templates/plan-template.md (✅ aligned with v1.1.0 ledger terminology)
 Follow-up TODOs: None
 -->
 
@@ -29,13 +25,13 @@ All data belonging to an organization MUST be strictly isolated at all tiers.
 - **Tenant Anchor**: Every database table containing tenant-scoped data MUST have a non-nullable `organization_id` foreign key referencing the `organizations` table, indexed for high-efficiency querying.
 - **Row-Level Security (RLS)**: PostgreSQL Row-Level Security MUST be enabled and forced on every tenant table in Supabase. No tenant queries MAY bypass RLS in application-facing paths.
 - **Zero-Trust Client Context**: The server MUST NEVER trust an `organization_id` provided in client payloads, headers, or URL parameters. The active organization identity MUST be securely resolved from the authenticated user's verified session and membership records.
-- **Multi-Org Membership**: Users MAY belong to multiple organizations with distinct roles in each. Tenant context switching MUST trigger re-authentication and session token boundary re-validation.
+- **Multi-Org Membership**: Users MAY belong to multiple organizations with distinct roles in each. Tenant context switching MUST trigger server-side tenant-context resolution and active organization/membership revalidation on every request; the server MUST independently verify active organization status (`is_active = true`) and active membership status (`status = 'active'`) before granting tenant access.
 - **Key Safeguards**: The Supabase service-role key MUST NEVER be exposed to the client, bundled in client builds, or utilized in client-accessible API routes without strict elevated boundary justification.
 
 ### II. Financial Invariance & Traceable Retail Operations (NON-NEGOTIABLE)
 Financial and inventory records represent legal business truth and MUST remain mathematically consistent, auditable, and immutable.
-- **Atomic Operations**: Operations spanning multiple tables (e.g., checkout deducting inventory, generating sales records, creating invoice snapshots, and logging payments) MUST be wrapped in explicit PostgreSQL database transactions.
-- **Double-Entry Stock Tracking**: Every modification to inventory levels MUST produce an immutable `stock_movements` ledger entry recording previous stock, quantity changed, new stock, reason (sale, return, damage, restock), reference document ID, and creator timestamp.
+- **Atomic Operations**: Operations spanning multiple tables (e.g., checkout deducting inventory, creating sales records, logging payments, or creating organizations with initial memberships) MUST execute within an explicit PostgreSQL database transaction ensuring complete atomic rollback upon failure. Multi-record mutations SHOULD prefer PostgreSQL stored functions/RPCs where appropriate to enforce transactional consistency at the database engine tier; stored functions MUST preserve PostgreSQL Row-Level Security and server authorization guarantees, utilizing `SECURITY DEFINER` only where elevated system privileges are strictly required and rigorously justified.
+- **Immutable Inventory Movement Ledger**: Every modification to inventory levels MUST produce an immutable `stock_movements` ledger entry recording previous stock, quantity changed, new stock, reason (sale, return, damage, restock), reference document ID, and creator timestamp. Current stock balances MUST remain mathematically consistent with opening balances and the cumulative sum of recorded movement ledger entries.
 - **Negative Stock Prevention**: Inventory decrement transactions MUST enforce non-negative stock constraints at the database level by default.
 - **Historical Snapshots**: Sales lines and invoices MUST store captured snapshots of product names, SKUs, unit cost, sale prices, discount rates, and tax percentages at the moment of sale to insulate historical reporting from future catalog edits.
 - **Immutability of Completed Transactions**: Completed sales and issued invoices MUST NOT be silently edited or deleted. Corrections MUST be executed through audited reversal, refund, void, or credit note workflows.
@@ -54,7 +50,7 @@ Security and authorization controls MUST be enforced comprehensively on the serv
 - **Server-Side Authorization**: UI-based role checks (e.g., hiding buttons or menu links) are purely cosmetic UX affordances. Every server action, API route handler, and database query MUST independently authenticate the caller and verify granular role-action permissions.
 - **Granular RBAC**: Access control MUST follow granular resource-action verbs (e.g., `inventory:read`, `inventory:adjust`, `sales:create`, `settings:update`). Predefined system roles (Owner, Admin, Manager, Cashier) MUST map deterministically to explicit permission sets.
 - **Least Privilege**: Users and processes MUST operate with the minimum permissions required to perform their designated duties.
-- **Data Protection & Sanitization**: Sensitive credentials, access tokens, customer PII, and organization secrets MUST be encrypted in transit (TLS) and at rest. All user-supplied text MUST be sanitized against XSS and injection vulnerabilities.
+- **Data Protection & Sanitization**: Sensitive credentials, access tokens, customer PII, and organization secrets MUST be encrypted in transit (TLS) and at rest. SQL injection prevention MUST be guaranteed through parameterized queries and typed stored procedure parameters; dynamic SQL string concatenation is strictly prohibited. XSS prevention MUST rely on framework contextual output encoding/safe rendering (React JSX) and Content Security Policy (CSP) headers; raw HTML rendering (`dangerouslySetInnerHTML`) is prohibited without explicit sanitization. All external inputs MUST be validated, trimmed, and normalized using Zod schemas at application boundaries before processing.
 
 ### V. Verified AI Integration & Critical Action Guardrails
 Artificial Intelligence assistance MUST be safe, sandboxed, and auxiliary to deterministic business logic.
@@ -73,9 +69,9 @@ The user interface MUST deliver high operational efficiency, predictability, and
 ### VII. Comprehensive Quality Verification & Test Integrity
 Quality is guaranteed through deterministic automated verification across all system tiers.
 - **Mandatory Test Coverage**:
-  - **Unit Tests**: Pure domain logic, financial math, discount calculations, tax formulas, and utility functions MUST have complete unit test coverage.
-  - **Integration Tests**: Multi-tenant database RLS policies, authorization guards, and complex multi-step database transactions MUST be tested against realistic isolated tenant databases.
-  - **End-to-End Tests**: Critical retail happy-paths (authentication, tenant selection, full POS sale lifecycle, stock adjustment, invoice generation) MUST be validated with automated browser flows.
+  - **Unit Tests**: Pure domain logic, financial math, discount calculations, tax formulas, validation schemas, state machines, and utility functions MUST have comprehensive automated test coverage validating critical business rules, calculation precision, boundary limits, and edge cases. Coverage MUST prioritize critical business rules and invariant verification over vanity metrics.
+  - **Integration Tests**: Multi-tenant database RLS policies, authorization guards, owner invariants, and transactional stored procedures MUST be tested against realistic isolated tenant databases to verify security invariants.
+  - **End-to-End Tests**: Critical retail happy-paths (authentication, tenant selection and switching, full POS sale lifecycle, stock adjustment, invoice generation) MUST be validated with automated browser flows.
 - **Definition of Done**: A feature or user story MUST NOT be marked complete solely because its visual component renders without syntax errors. Completion requires passing all acceptance scenarios, verified tenant isolation, passing lint/type checks, and automated test coverage for critical paths.
 
 ## Technical Baseline & Architectural Constraints
@@ -93,6 +89,7 @@ The BizFlow AI codebase is standardized on the following technical baseline. Dev
    - **Authentication**: Supabase Auth with secure JWT session handling in HTTP-only cookies.
    - **Authorization Engine**: PostgreSQL Row-Level Security (RLS) coupled with a centralized RBAC role-permission schema.
    - **Storage**: Supabase Storage with bucket-level RLS policies for receipts, product images, and export files.
+   - **API & Orchestration**: Next.js Server Actions for web application orchestration and versioned REST API Route Handlers (`/api/v1/...`) for mobile and external client integrations. Both MUST share the identical domain logic, Zod validation schemas, tenant isolation, and authorization boundaries.
    - **Migrations**: Declarative, version-controlled SQL migrations managed through the Supabase CLI. Manual, un-migrated schema mutations in production are strictly forbidden.
 3. **AI Pipeline**:
    - **Provider**: OpenAI API via official Node.js / TypeScript SDK.
@@ -100,6 +97,9 @@ The BizFlow AI codebase is standardized on the following technical baseline. Dev
 4. **Hosting & Deployment**:
    - **Hosting Platform**: Vercel for the Next.js application, Supabase Cloud for backend infrastructure.
    - **Environment Management**: Strict separation between Development, Staging, and Production environments with isolated Supabase projects and cryptographic secrets.
+5. **Mobile Architecture (Planned Companion Client)**:
+   - **Framework**: Flutter (cross-platform iOS & Android companion application).
+   - **Shared Backend Constraint**: The Flutter mobile application MUST integrate exclusively via the versioned REST API and Supabase Auth. It MUST share the identical database, business rules, validation criteria, tenant isolation, and authorization requirements as the web application. Mobile clients MUST NOT maintain an independent database, duplicate business rules, or bypass server authorization.
 
 ## Development Workflow, Quality Gates & SDD Governance
 
@@ -149,4 +149,4 @@ This Constitution is the supreme engineering authority for BizFlow AI. It supers
    - All Pull Requests, code reviews, and automated CI workflows MUST verify constitutional adherence.
    - Reviewers MUST block any code introducing cross-tenant vulnerabilities, unvalidated mutations, untracked inventory alterations, or bypassed server authorization.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.1.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-11-03
