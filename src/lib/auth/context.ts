@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUserActiveOrganizations } from "@/lib/auth/guards";
-import type { TenantContext } from "@/types/auth";
+import { SYSTEM_PERMISSIONS, ROLE_PERMISSIONS } from "@/lib/auth/permissions";
+import type { TenantContext, PermissionKey, AppRole } from "@/types/auth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type TenantResolutionError =
@@ -25,6 +26,7 @@ export type TenantResolutionResult =
  * 3. Enforces PostgreSQL Row-Level Security: queries using the authenticated user's client.
  * 4. Verifies active organization status (`is_active = true`) and active membership (`status = 'active'`).
  * 5. Resolves user's actual database role (`membership.role`).
+ * 6. Resolves authoritative permissions: Owner receives all registered permissions; other roles query role_permissions.
  */
 export async function resolveTenantContext(
   slug: string,
@@ -83,6 +85,26 @@ export async function resolveTenantContext(
     return { ok: false, error: "forbidden" };
   }
 
+  // 6. Authoritative Permission Resolution (FR-033, FR-034, Principle IV)
+  let permissions: PermissionKey[] = [];
+  if (membership.role === "owner") {
+    // Owner dynamically receives all registered permissions in the catalog
+    permissions = [...SYSTEM_PERMISSIONS];
+  } else {
+    // Non-owner roles evaluate from role_permissions schema
+    const { data: rolePerms, error: rolePermsErr } = await supabase
+      .from("role_permissions")
+      .select("permission_id")
+      .eq("role", membership.role);
+
+    const callerRole = membership.role as AppRole;
+    if (!rolePermsErr && rolePerms && rolePerms.length > 0) {
+      permissions = rolePerms.map((rp) => rp.permission_id as PermissionKey);
+    } else {
+      permissions = [...(ROLE_PERMISSIONS[callerRole] || [])];
+    }
+  }
+
   return {
     ok: true,
     context: {
@@ -91,6 +113,7 @@ export async function resolveTenantContext(
       membership,
       role: membership.role,
       activeOrganizations,
+      permissions,
     },
   };
 }
@@ -127,3 +150,4 @@ export async function getTenantContext(slug: string): Promise<TenantContext> {
   return result.context;
 }
 
+export const requireTenantContext = getTenantContext;
