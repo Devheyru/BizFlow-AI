@@ -21,6 +21,19 @@ export type OrganizationAuditEventInsert = Database["public"]["Tables"]["organiz
 
 export type AppRole = Enums<"app_role">;
 export type MembershipStatus = Enums<"membership_status">;
+export type InvitationStatus = Enums<"invitation_status">;
+
+// ============================================================================
+// Permission & Authorization Domain Models
+// ============================================================================
+export type PermissionKey =
+  | "employees:read"
+  | "employees:invite"
+  | "employees:update_role"
+  | "employees:suspend"
+  | "employees:remove"
+  | "employees:invitations_read"
+  | "employees:invitations_revoke";
 
 // ============================================================================
 // Server Action Result Pattern
@@ -79,6 +92,7 @@ export interface TenantContext {
   membership: OrganizationMembership;
   role: AppRole;
   activeOrganizations: OrganizationSummary[];
+  permissions: PermissionKey[];
 }
 
 // ============================================================================
