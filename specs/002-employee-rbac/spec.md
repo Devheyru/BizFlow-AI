@@ -16,8 +16,13 @@
 1. **Permission Naming Convention**:
    - In alignment with Constitutional Principle IV, all permission identifiers MUST strictly use colon-separated resource-action verbs: `<resource>:<action>` (e.g., `employees:read`, `employees:invite`, `employees:update_role`, `employees:suspend`, `employees:remove`, `employees:invitations_read`, `employees:invitations_revoke`).
    - Dot notation is replaced across all requirements, scenarios, permission matrices, and future module references.
-2. **Membership Removal Strategy (Soft Revocation Only)**:
+2. **Membership Removal Strategy (Soft Revocation & Terminal State)**:
    - Employee removal MUST set `organization_memberships.status` to `'revoked'`.
+   - Permitted membership status transitions:
+     - `active` $\leftrightarrow$ `suspended` (Suspension and Reactivation)
+     - `active` $\rightarrow$ `revoked` (Removal)
+     - `suspended` $\rightarrow$ `revoked` (Removal from suspended state)
+   - In Feature 002, `status = 'revoked'` is strictly terminal. Any attempt to update the role (`update_organization_member_role`) or status (`update_organization_member_status`) on a revoked membership MUST be rejected with error `P0025` ("Cannot modify a revoked membership").
    - Hard deletion of membership records is strictly OUT OF SCOPE to maintain referential integrity with historical audit logs and retail transaction records.
    - Removing an employee MUST NOT revoke the user's global Supabase authentication session and MUST NOT affect their active memberships in other organizations.
    - On all subsequent requests, tenant context resolution (`resolveTenantContext()`) and database security helpers (`get_user_organization_ids()`) filter exclusively for `status = 'active'`, causing removed/revoked members to immediately fail tenant authorization (HTTP 404/403).
@@ -25,13 +30,16 @@
    - The system MUST validate the invitation token hash before exposing any invitation or organization metadata to the client, preventing token fishing and tenant enumeration.
    - Both **Acceptance** and **Decline** operations MUST require an authenticated session where the user's verified email strictly matches the normalized invitation recipient email (`lower(trim(email))`).
    - Raw tokens are 256-bit cryptographically secure random values (64 hex characters) and are NEVER persisted; only their SHA-256 hash (`token_hash`) is stored in the database.
-4. **Authoritative Owner Permission Resolution**:
+4. **Authoritative Owner Permission Resolution & Catalog Bounding**:
    - The authorization engine enforces a single unified permission-resolution model bounded strictly by the registered permission catalog:
-     - The `Owner` role dynamically receives all permissions that are registered in the system permissions catalog (`permissions.id`).
-     - Any unregistered, unknown, or misspelled permission string MUST always evaluate to `false` for all roles, including `Owner`.
-     - `Admin`, `Manager`, and `Cashier` roles receive permissions mapped deterministically through the `role_permissions` schema against registered catalog permissions.
-     - Database stored procedures and server-side actions MUST enforce identical permission outcomes (`hasPermission(context, permissionKey)` verifies registration in the catalog before evaluating the role).
-5. **Transaction-Safe Lazy Expiration Lifecycle**:
+     - Require the permission key to exist in `public.permissions` before granting access to any role, including `Owner`.
+     - For registered permissions, the `Owner` role receives access automatically.
+     - For other roles (`Admin`, `Manager`, `Cashier`), permissions are evaluated against `public.role_permissions`.
+     - Unknown or unregistered permission keys MUST always be denied (`false`) for all roles, including `Owner`.
+     - Database stored procedures and the application TypeScript `hasPermission` resolver MUST enforce identical permission outcomes.
+5. **Invitation Expiration & Maximum 7-Day Lifetime Boundary**:
+   - The database stored procedure RPC boundary strictly enforces a maximum invitation lifetime of exactly seven days (168 hours) from the timestamp of execution: `p_expires_at > now() AND p_expires_at <= now() + INTERVAL '7 days'`.
+   - This boundary check applies to both initial invitation issuance (`create_organization_invitation`) and invitation resending (`resend_organization_invitation`). Any expiration timestamp in the past or exceeding 7 days is rejected with validation error `P0009`.
    - Invitation expiration transitions occur lazily without background crons or scheduled workers.
    - When an invitation is evaluated or an acceptance is attempted after `expires_at <= now()`, the database acceptance procedure MUST employ a transaction-safe expiration mechanism that ensures the `status = 'expired'` update commits durably to the database even though acceptance is rejected.
    - To prevent PostgreSQL transaction rollbacks (where raising an unhandled exception rolls back preceding table updates), the procedure MUST transition the invitation record to `status = 'expired'`, commit the transition, and return a structured rejection result (e.g., `{ "success": false, "code": "INVITATION_EXPIRED" }`), ensuring the `'expired'` status persists.
@@ -84,12 +92,12 @@ As an organization Owner or Admin, I want to invite new team members to join my 
 
 **Acceptance Scenarios**:
 
-1. **Given** an authorized user with `employees:invite` permission, **When** they submit the invitation form with a valid email and an allowed role, **Then** a cryptographically secure random token (256-bit entropy, 64 hex characters) is generated, its SHA-256 hash is persisted in `organization_invitations` with a 7-day expiration, and an invitation email is dispatched outside the database transaction.
+1. **Given** an authorized user with `employees:invite` permission, **When** they submit the invitation form with a valid email and an allowed role, **Then** a cryptographically secure random token (256-bit entropy, 64 hex characters) is generated, its SHA-256 hash is persisted in `organization_invitations` with an expiration enforced to a maximum lifetime of exactly 7 days at the database RPC boundary, and an invitation email is dispatched outside the database transaction.
 2. **Given** an Admin attempting to send an invitation, **When** they attempt to invite someone as an `Owner`, **Then** the request is rejected with a validation error stating that only existing Owners can invite new Owners.
 3. **Given** an invitation request for an email that already has a `pending` invitation in the organization, **When** the form is submitted, **Then** the system rejects the duplicate submission with an actionable message offering to resend the existing invitation.
 4. **Given** an invitation request for a user who is already an active member of the organization, **When** the form is submitted, **Then** the system blocks the invitation with a notification that the user is already an active team member.
 5. **Given** a successfully committed invitation where external email delivery fails, **When** the email dispatch fails, **Then** the invitation record remains saved in `pending` status, and the user receives a confirmation that the invite was created along with a notification that email delivery failed, with an immediate option to "Resend Invitation".
-6. **Given** an authorized user viewing pending invitations, **When** they select "Resend Invitation", **Then** the previous token hash is invalidated, a new secure token hash is generated with a renewed 7-day expiration, and a new email is dispatched.
+6. **Given** an authorized user viewing pending invitations, **When** they select "Resend Invitation", **Then** the previous token hash is invalidated, a new secure token hash is generated with an expiration enforced to a maximum lifetime of exactly 7 days at the database RPC boundary, and a new email is dispatched.
 7. **Given** an authorized user viewing pending invitations, **When** they select "Revoke Invitation", **Then** the invitation status transitions to `revoked`, the token is immediately invalidated, and an `employee:invitation_revoked` audit event is logged.
 
 ---
@@ -107,7 +115,7 @@ As an invited employee, I want to open the invitation link in my email, verify m
 1. **Given** an unauthenticated visitor opening an invitation link, **When** the page loads, **Then** the server validates the token hash before rendering any details; if valid, it prompts the user to sign in or sign up without exposing the organization name or role until authentication is verified.
 2. **Given** an invitation link that has expired (older than 7 days) or has been revoked, **When** a user accesses the link or attempts acceptance, **Then** the acceptance procedure transaction-safely updates the invitation status to `expired`, commits the status update, rejects acceptance with an `INVITATION_EXPIRED` result code, and displays a clear notification that the invitation has expired.
 3. **Given** an authenticated user whose verified email matches the invitation recipient, **When** they click "Accept Invitation", **Then** the acceptance executes in an atomic database transaction: verifies `expires_at > now()`, transitions status to `accepted`, creates an `active` membership in `organization_memberships` with the invited role, logs an `employee:joined` audit event, and redirects to the organization dashboard.
-4. **Given** an authenticated user whose email does *not* match the invited email address (e.g., signed in as `other@domain.com` for an invite sent to `invited@domain.com`), **When** they attempt to accept or decline the invitation, **Then** the operation is rejected with an explicit message indicating the email mismatch and prompting them to switch accounts.
+4. **Given** an authenticated user whose email does *not* match the invited email address (e.g., signed in as `other@domain.com` for an invite sent to `invited@domain.com`), **When** they attempt to accept or decline the invitation, **Then** the operation is rejected with a generic `EMAIL_MISMATCH` failure code prompting the user to switch accounts without disclosing either email address in the error response.
 5. **Given** an authenticated user whose email matches the invitation, **When** they click "Decline Invitation", **Then** the invitation status transitions to `declined`, no membership is created, an `employee:invitation_declined` audit event is logged, and the user is redirected safely.
 6. **Given** an invitation that has already been accepted or declined, **When** a user accesses the link again, **Then** the system informs them that the invitation is no longer active.
 
@@ -195,12 +203,12 @@ As a system architect and developer, I want a unified server-side permission che
 - **FR-006**: System MUST validate invitation email syntax using RFC 5322 standard formatting and normalize addresses to lowercase.
 - **FR-007**: System MUST generate cryptographically secure random invitation tokens with a minimum of 256 bits of entropy (64 hexadecimal characters).
 - **FR-008**: System MUST store only the cryptographic hash (SHA-256) of invitation tokens in the database; raw tokens MUST NEVER be stored in tables or logged.
-- **FR-009**: System MUST enforce a default expiration period of exactly 7 days (168 hours) from the creation timestamp on all invitations.
+- **FR-009**: System MUST enforce a maximum invitation lifetime of exactly seven days (168 hours) at the database RPC boundary: the database stored procedure MUST reject any invitation expiration timestamp where `p_expires_at <= now()` or `p_expires_at > now() + INTERVAL '7 days'` with error code `P0009`.
 - **FR-010**: System MUST enforce a unique pending invitation constraint per organization and email address, preventing multiple concurrent pending invites to the same recipient.
 - **FR-011**: System MUST reject invitation creation if the target email is already an active member of the organization.
 - **FR-012**: System MUST disallow Admin users from inviting new members with the `Owner` role. Only existing active Owners MAY invite new Owners.
 - **FR-013**: System MUST provide an invitation revocation workflow allowing authorized managers possessing `employees:invitations_revoke` to invalidate unaccepted invitations immediately.
-- **FR-014**: System MUST provide a resend invitation workflow that invalidates previous tokens and issues a fresh token with a renewed 7-day expiration window.
+- **FR-014**: System MUST provide a resend invitation workflow that invalidates previous tokens and issues a fresh token with a renewed expiration window, enforcing the same maximum lifetime of exactly seven days at the database RPC boundary (`p_new_expires_at > now() AND p_new_expires_at <= now() + INTERVAL '7 days'`).
 - **FR-015**: System MUST execute external email delivery outside the database transaction. If email delivery fails, the invitation record MUST remain in `pending` status, and the user MUST be notified of the delivery failure with an option to resend.
 
 #### Invitation Acceptance & Rejection
@@ -208,7 +216,7 @@ As a system architect and developer, I want a unified server-side permission che
 - **FR-017**: System MUST require authentication before an invitation can be accepted or declined.
 - **FR-018**: Existing registered users MUST be able to accept invitations without creating a new account.
 - **FR-019**: New users MUST be able to register and verify their account through the invitation onboarding flow, seamlessly returning to accept the invitation upon completion.
-- **FR-020**: System MUST verify that the authenticated user's confirmed email address exactly matches the email recorded on the invitation record before permitting acceptance or decline.
+- **FR-020**: System MUST verify that the authenticated user's confirmed email address exactly matches the email recorded on the invitation record before permitting acceptance or decline. If mismatched, the system MUST return a generic `EMAIL_MISMATCH` error code without disclosing expected or actual email addresses in the error payload, preserving recipient privacy.
 - **FR-021**: Invitation acceptance MUST be atomic: in a single database transaction, the invitation status MUST transition to `accepted`, the user MUST be added to `organization_memberships` with the invited role and `active` status, and an audit event MUST be logged.
 - **FR-022**: System MUST enforce a transaction-safe lazy expiration mechanism: inside the database acceptance procedure, if `expires_at <= now()`, the procedure MUST update the invitation status to `expired`, commit the transition, and return a structured rejection result (preventing transaction rollback from discarding the status update).
 - **FR-023**: System MUST prevent invitation token replay: once an invitation has been accepted, declined, revoked, or expired, subsequent acceptance attempts MUST be rejected with specific, user-friendly error messages.
@@ -225,16 +233,17 @@ As a system architect and developer, I want a unified server-side permission che
 #### Membership Status Management
 - **FR-027**: System MUST allow users with `employees:suspend` permission to suspend an active employee, immediately cutting off access to tenant data and actions on their next request.
 - **FR-028**: System MUST allow users with `employees:suspend` permission to reactivate a suspended employee.
-- **FR-029**: System MUST allow users with `employees:remove` permission to remove an employee by transitioning their membership status to `revoked`. Hard deletion of membership records is strictly prohibited.
+- **FR-029**: System MUST allow users with `employees:remove` permission to remove an employee by transitioning their membership status to `revoked`. Hard deletion of membership records is strictly prohibited. In Feature 002, `revoked` is a terminal status: subsequent attempts to modify the role or status of a revoked membership MUST be rejected with error `P0025`.
 - **FR-030**: Member removal MUST NOT terminate the user's global Supabase authentication session and MUST NOT affect their access to other organizations.
 - **FR-031**: When an employee is suspended or revoked, all subsequent requests to the organization's workspace MUST be rejected with HTTP 404 (Not Found).
 
 #### Granular Permissions & Authoritative Resolution
 - **FR-032**: System MUST establish a permissions catalog and role-to-permission mapping schema supporting colon-separated permission keys (`<resource>:<action>`).
 - **FR-033**: System MUST enforce an authoritative permission resolution model bounded strictly by the registered catalog:
-  - The `Owner` role MUST possess every permission registered in the `permissions` catalog.
-  - Any permission key NOT registered in the `permissions` catalog MUST evaluate to `false` for all roles (including `Owner`).
-  - `Admin`, `Manager`, and `Cashier` roles MUST have permissions resolved deterministically through the `role_permissions` mapping table against registered catalog permissions.
+  - Require the permission key to exist in `public.permissions` before granting access to any role, including `Owner`.
+  - For registered permissions, the `Owner` role automatically receives access.
+  - For other roles (`Admin`, `Manager`, `Cashier`), permissions MUST be checked against `public.role_permissions`.
+  - Unknown or unregistered permission keys MUST always be denied (`false`) for all roles, including `Owner`.
 - **FR-034**: System MUST enforce permission checks on the server for every server action, route handler, and tenant layout without relying on cached client state.
 
 #### Audit Logging
