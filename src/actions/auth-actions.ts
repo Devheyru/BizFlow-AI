@@ -227,8 +227,12 @@ export async function signInAction(
     };
   }
 
-  // If user successfully confirmed to have 0 active memberships, guide to onboarding
+  // If user successfully confirmed to have 0 active memberships, guide to onboarding or target redirect (e.g. pending invitation)
   if (!memberships || memberships.length === 0) {
+    const targetUrl = redirectTo
+      ? sanitizeRedirectUrl(redirectTo, "/onboarding/create-organization")
+      : "/onboarding/create-organization";
+
     return {
       success: true,
       data: {
@@ -236,7 +240,7 @@ export async function signInAction(
         email: user.email || email,
         isEmailVerified: true,
         hasActiveOrganization: false,
-        redirectUrl: "/onboarding/create-organization",
+        redirectUrl: targetUrl,
       },
     };
   }
@@ -275,6 +279,10 @@ export async function signInAction(
   // Deterministic fallback: first organization in activeOrgs (oldest active membership)
   const fallbackOrg = activeOrgs[0];
   if (!fallbackOrg || activeOrgs.length === 0) {
+    const targetUrl = redirectTo
+      ? sanitizeRedirectUrl(redirectTo, "/onboarding/create-organization")
+      : "/onboarding/create-organization";
+
     return {
       success: true,
       data: {
@@ -282,7 +290,7 @@ export async function signInAction(
         email: user.email || email,
         isEmailVerified: true,
         hasActiveOrganization: false,
-        redirectUrl: "/onboarding/create-organization",
+        redirectUrl: targetUrl,
       },
     };
   }

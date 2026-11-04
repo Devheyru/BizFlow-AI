@@ -70,8 +70,8 @@ export function hasPermission(
     return true;
   }
 
-  // Rule 4: Evaluated against context permissions (or role permissions fallback)
-  if (context.permissions && context.permissions.length > 0) {
+  // Rule 4: Evaluated against context permissions (fail-closed if array is empty or permission not present)
+  if (Array.isArray(context.permissions)) {
     return context.permissions.includes(permission as PermissionKey);
   }
 

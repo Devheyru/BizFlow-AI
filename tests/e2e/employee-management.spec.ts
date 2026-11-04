@@ -118,11 +118,11 @@ test.describe("T062: Employee Management & RBAC End-to-End Workflow (US1–US5)"
 
     // Owner navigates to Employee Directory
     await ownerPage.goto(`/${orgSlug}/employees`);
-    await expect(ownerPage.getByRole("heading", { name: "Employee Directory" })).toBeVisible();
+    await expect(ownerPage.getByRole("heading", { name: "Workforce & Employees" })).toBeVisible();
 
     // Verify Owner is displayed in table
-    await expect(ownerPage.getByText(ownerEmail)).toBeVisible();
-    await expect(ownerPage.getByText("Owen Owner")).toBeVisible();
+    await expect(ownerPage.getByRole("table").getByText(ownerEmail)).toBeVisible();
+    await expect(ownerPage.getByRole("table").getByText("Owen Owner")).toBeVisible();
 
     // 2. Create pending invitation for Employee
     const rawToken = crypto.randomBytes(32).toString("hex");
@@ -140,23 +140,22 @@ test.describe("T062: Employee Management & RBAC End-to-End Workflow (US1–US5)"
     });
 
     // Verify Pending Invitations tab shows the pending invitation
-    await ownerPage.getByRole("tab", { name: /pending invitations/i }).click();
+    await ownerPage.getByRole("button", { name: /pending invitations/i }).click();
     await expect(ownerPage.getByText(employeeEmail)).toBeVisible();
 
     // 3. Employee Browser Context
     const employeeContext = await browser.newContext();
     const employeePage = await employeeContext.newPage();
 
-    // Employee signs in first
-    await employeePage.goto("/sign-in");
+    // Employee signs in with return redirect to the invitation
+    await employeePage.goto(`/sign-in?next=${encodeURIComponent(`/invitations/accept?token=${rawToken}`)}`);
     await employeePage.fill('input[type="email"]', employeeEmail);
     await employeePage.fill('input[type="password"]', testPassword);
     await employeePage.click('button[type="submit"]');
-    await employeePage.waitForLoadState("networkidle");
 
-    // Employee visits the invitation link
-    await employeePage.goto(`/invitations/accept?token=${rawToken}`);
-    await expect(employeePage.getByRole("heading", { name: /accept invitation/i })).toBeVisible();
+    // Wait for redirect to invitation accept page
+    await employeePage.waitForURL(new RegExp(`/invitations/accept`));
+    await expect(employeePage.getByRole("heading", { name: /accept.*invitation/i })).toBeVisible();
     await expect(employeePage.getByRole("button", { name: /accept invitation/i })).toBeVisible();
 
     // Employee accepts invitation
@@ -167,15 +166,14 @@ test.describe("T062: Employee Management & RBAC End-to-End Workflow (US1–US5)"
     expect(employeePage.url()).toContain(`/${orgSlug}/dashboard`);
 
     // 4. Employee as Cashier attempts to visit Employee Directory (denied due to lack of employees:read)
+    // Server returns HTTP 404 (via notFound()) to prevent tenant directory discovery
     await employeePage.goto(`/${orgSlug}/employees`);
-    // Should be redirected to dashboard
-    await employeePage.waitForURL(new RegExp(`/${orgSlug}/dashboard`));
-    expect(employeePage.url()).toContain(`/${orgSlug}/dashboard`);
+    await expect(employeePage.getByRole("heading", { name: "Page Not Found" })).toBeVisible();
 
     // 5. Owner updates Employee's role to Manager
-    await ownerPage.getByRole("tab", { name: /employees/i }).click();
+    await ownerPage.getByRole("button", { name: /active directory/i }).click();
     await ownerPage.reload();
-    await expect(ownerPage.getByText(employeeEmail)).toBeVisible();
+    await expect(ownerPage.getByRole("table").getByText(employeeEmail)).toBeVisible();
 
     // Retrieve employee's membership ID
     const { data: empMem } = await adminClient
@@ -193,8 +191,8 @@ test.describe("T062: Employee Management & RBAC End-to-End Workflow (US1–US5)"
 
     // 6. Employee (now Manager with employees:read) visits Employee Directory
     await employeePage.goto(`/${orgSlug}/employees`);
-    await expect(employeePage.getByRole("heading", { name: "Employee Directory" })).toBeVisible();
-    await expect(employeePage.getByText(employeeEmail)).toBeVisible();
+    await expect(employeePage.getByRole("heading", { name: "Workforce & Employees" })).toBeVisible();
+    await expect(employeePage.getByRole("table").getByText(employeeEmail)).toBeVisible();
 
     // 7. Owner suspends Employee
     await adminClient
@@ -202,9 +200,14 @@ test.describe("T062: Employee Management & RBAC End-to-End Workflow (US1–US5)"
       .update({ status: "suspended" })
       .eq("id", empMem!.id);
 
-    // 8. Immediate Lockout: Employee refreshes or navigates and is locked out
+    // 8. Immediate Lockout: Suspended employee has 0 active workspaces and is locked out to onboarding
     await employeePage.reload();
-    await employeePage.waitForURL(new RegExp(`/${orgSlug}/suspended|/onboarding`));
+    await employeePage.waitForURL(/\/onboarding\/create-organization/);
+    await expect(employeePage.getByRole("heading", { name: "Set up your retail store" })).toBeVisible();
+
+    // Attempting to visit tenant workspace is immediately blocked
+    await employeePage.goto(`/${orgSlug}/dashboard`);
+    await employeePage.waitForURL(/\/onboarding\/create-organization/);
 
     await ownerContext.close();
     await employeeContext.close();

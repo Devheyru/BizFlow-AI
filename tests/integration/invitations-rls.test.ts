@@ -389,6 +389,143 @@ describe("Integration: Invitations & RLS (T050–T056)", () => {
       expect((replayData as any).success).toBe(false);
       expect((replayData as any).code).toBe("INVITATION_NOT_PENDING");
     });
+
+    it("allows a previously revoked employee to rejoin via a new invitation and records rejoining audit metadata", async () => {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 86400000).toISOString();
+
+      // Revoke any previous invitations
+      await pgClient.query(
+        "UPDATE public.organization_invitations SET status = 'revoked' WHERE organization_id = $1 AND email = $2;",
+        [testOrgId, inviteeUser.email]
+      );
+
+      // Ensure membership is marked revoked
+      await pgClient.query(
+        "UPDATE public.organization_memberships SET status = 'revoked' WHERE organization_id = $1 AND user_id = $2;",
+        [testOrgId, inviteeUser.id]
+      );
+
+      // Owner issues a new invitation to the revoked user (must succeed, P0025 not thrown)
+      const { data: createData, error: createErr } = await ownerUser.client.rpc("create_organization_invitation", {
+        p_org_id: testOrgId,
+        p_email: inviteeUser.email,
+        p_role: "manager",
+        p_token_hash: tokenHash,
+        p_expires_at: expiresAt,
+      });
+
+      expect(createErr).toBeNull();
+      expect(createData).toBeDefined();
+
+      // Invitee accepts the invitation
+      const { data: acceptData, error: acceptErr } = await inviteeUser.client.rpc("accept_organization_invitation", {
+        p_token_hash: tokenHash,
+      });
+
+      expect(acceptErr).toBeNull();
+      const acceptRes = acceptData as any;
+      expect(acceptRes.success).toBe(true);
+      expect(acceptRes.role).toBe("manager");
+      expect(acceptRes.status).toBe("active");
+
+      // Verify membership is now active with updated role
+      const memCheck = await pgClient.query(
+        "SELECT status, role FROM public.organization_memberships WHERE organization_id = $1 AND user_id = $2;",
+        [testOrgId, inviteeUser.id]
+      );
+      expect(memCheck.rows[0].status).toBe("active");
+      expect(memCheck.rows[0].role).toBe("manager");
+
+      // Verify audit event records rejoining metadata
+      const auditCheck = await pgClient.query(
+        `SELECT event_type, metadata FROM public.organization_audit_events
+         WHERE organization_id = $1 AND actor_id = $2 AND event_type = 'employee.joined'
+         ORDER BY created_at DESC LIMIT 1;`,
+        [testOrgId, inviteeUser.id]
+      );
+      expect(auditCheck.rows.length).toBe(1);
+      expect(auditCheck.rows[0].metadata.rejoined).toBe(true);
+      expect(auditCheck.rows[0].metadata.previous_status).toBe("revoked");
+      expect(auditCheck.rows[0].metadata.role).toBe("manager");
+    });
+
+    it("rejects invitation acceptance when user has a suspended membership (MEMBERSHIP_SUSPENDED)", async () => {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 86400000).toISOString();
+
+      // Revoke any previous invitations
+      await pgClient.query(
+        "UPDATE public.organization_invitations SET status = 'revoked' WHERE organization_id = $1 AND email = $2;",
+        [testOrgId, inviteeUser.email]
+      );
+
+      // Set membership to suspended
+      await pgClient.query(
+        "UPDATE public.organization_memberships SET status = 'suspended' WHERE organization_id = $1 AND user_id = $2;",
+        [testOrgId, inviteeUser.id]
+      );
+
+      await pgClient.query(
+        `INSERT INTO public.organization_invitations (organization_id, email, role, token_hash, invited_by, status, expires_at)
+         VALUES ($1, $2, 'cashier', $3, $4, 'pending', $5);`,
+        [testOrgId, inviteeUser.email, tokenHash, ownerUser.id, expiresAt]
+      );
+
+      const { data: acceptData, error: acceptErr } = await inviteeUser.client.rpc("accept_organization_invitation", {
+        p_token_hash: tokenHash,
+      });
+
+      expect(acceptErr).toBeNull();
+      const acceptRes = acceptData as any;
+      expect(acceptRes.success).toBe(false);
+      expect(acceptRes.code).toBe("MEMBERSHIP_SUSPENDED");
+
+      // Verify status remains suspended
+      const memCheck = await pgClient.query(
+        "SELECT status FROM public.organization_memberships WHERE organization_id = $1 AND user_id = $2;",
+        [testOrgId, inviteeUser.id]
+      );
+      expect(memCheck.rows[0].status).toBe("suspended");
+    });
+
+    it("rejects creating invitation when user already has an active (P0021) or suspended (P0027) membership", async () => {
+      // 1. Suspended membership check (P0027)
+      await pgClient.query(
+        "UPDATE public.organization_memberships SET status = 'suspended' WHERE organization_id = $1 AND user_id = $2;",
+        [testOrgId, inviteeUser.id]
+      );
+
+      const token1 = crypto.createHash("sha256").update(crypto.randomBytes(32)).digest("hex");
+      const { error: suspendedErr } = await ownerUser.client.rpc("create_organization_invitation", {
+        p_org_id: testOrgId,
+        p_email: inviteeUser.email,
+        p_role: "cashier",
+        p_token_hash: token1,
+        p_expires_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+      expect(suspendedErr).toBeDefined();
+      expect(suspendedErr?.code).toBe("P0027");
+
+      // 2. Active membership check (P0021)
+      await pgClient.query(
+        "UPDATE public.organization_memberships SET status = 'active' WHERE organization_id = $1 AND user_id = $2;",
+        [testOrgId, inviteeUser.id]
+      );
+
+      const token2 = crypto.createHash("sha256").update(crypto.randomBytes(32)).digest("hex");
+      const { error: activeErr } = await ownerUser.client.rpc("create_organization_invitation", {
+        p_org_id: testOrgId,
+        p_email: inviteeUser.email,
+        p_role: "cashier",
+        p_token_hash: token2,
+        p_expires_at: new Date(Date.now() + 86400000).toISOString(),
+      });
+      expect(activeErr).toBeDefined();
+      expect(activeErr?.code).toBe("P0021");
+    });
   });
 
   describe("T056: Resend Behavior & Token Invalidation (FR-014, FR-015)", () => {
