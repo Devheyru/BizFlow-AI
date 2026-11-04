@@ -234,7 +234,7 @@ As a system architect and developer, I want a unified server-side permission che
 #### Membership Status Management
 - **FR-027**: System MUST allow users with `employees:suspend` permission to suspend an active employee, immediately cutting off access to tenant data and actions on their next request.
 - **FR-028**: System MUST allow users with `employees:suspend` permission to reactivate a suspended employee.
-- **FR-029**: System MUST allow users with `employees:remove` permission to remove an employee by transitioning their membership status to `revoked`. Hard deletion of membership records is strictly prohibited. In Feature 002, `revoked` is a terminal status: subsequent attempts to modify the role or status of a revoked membership MUST be rejected with error `P0025`.
+- **FR-029**: System MUST allow users with `employees:remove` permission to remove an employee by transitioning their membership status to `revoked`. Hard deletion of membership records is strictly prohibited. In Feature 002, `revoked` is a terminal status: subsequent direct attempts to modify the role or status of a revoked membership MUST be rejected with error `P0025` (a removed employee may rejoin an organization only through an authorized invitation flow).
 - **FR-030**: Member removal MUST NOT terminate the user's global Supabase authentication session and MUST NOT affect their access to other organizations.
 - **FR-031**: When an employee is suspended or revoked, all subsequent requests to the organization's workspace MUST be rejected with HTTP 404 (Not Found).
 
