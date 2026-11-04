@@ -5,6 +5,7 @@
 **Branch**: `002-employee-rbac`  
 **Initial Implementation Commit**: `e4c130b5821ef2e2343f47f42c9724c4ac06a07c`  
 **Final Remediation Commit**: `eca0b8f04814be8bab70baffad28e8f570435965`  
+**Audit Reconciliation Commit**: `d85c7a26ba4cde5e583207363fdc65654b764008` (short SHA: `d85c7a2`)  
 **Constitution**: BizFlow AI Constitution v1.1.0  
 **Scope**: Full implementation audit across all 10 phases, database RPCs, RLS, Server Actions, UI components, unit tests, integration tests, and E2E workflow.
 
@@ -44,9 +45,12 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 | **Git Branch** | `002-employee-rbac` | `002-employee-rbac` | PASS |
 | **Initial Implementation Commit** | Initial Feature 002 commit | `e4c130b5821ef2e2343f47f42c9724c4ac06a07c` | PASS |
 | **Final Remediation Commit** | Audit remediation & policy alignment | `eca0b8f04814be8bab70baffad28e8f570435965` | PASS |
+| **Audit Reconciliation Commit** | Audit report reconciliation | `d85c7a26ba4cde5e583207363fdc65654b764008` (short SHA: `d85c7a2`) | PASS |
 | **Working Tree** | Clean | Clean | PASS |
 | **Commit Scope** | Feature 002 only | Feature 002 RBAC and audit remediations | PASS |
 | **Feature 001 Regression** | Zero breaking changes | Strictly backward-compatible additive changes | PASS |
+
+*(Note: Verified in Git reflog/log that the audit reconciliation commit starting with `d85c7a2` has full SHA `d85c7a26ba4cde5e583207363fdc65654b764008`; the 40-character string `d85c7a216262b8a7c0f1c63391d4e0bcfdf26b77` is not a valid commit in the repository object database).*
 
 ### Modified Existing Files
 - `src/components/layout/TenantHeader.tsx`: Added `<TenantNav slug={organization.slug} role={role} />`.
@@ -135,8 +139,12 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 - **Initial Audit Status**: **PARTIAL** (Defect F-02 identified)
 - **Post-Remediation Status**: **PASS**
 - **Findings & Remediation**:
-  - T046–T061: All 17 automated unit and integration test suites pass (100% clean).
+  - **T046–T061 (Automated Test Tasks)**: All 16 automated test tasks pass cleanly (100% clean). Automated test coverage across the project comprises:
+    - 14 unit test files / 151 unit test cases
+    - 15 integration test files / 170 integration test cases
+    - 321 total automated Vitest test cases
   - **Remediated (F-02 / T062)**: `tests/e2e/employee-management.spec.ts` was updated to match the production UI headings (`Workforce & Employees`), tab buttons, scoped table cells, and the authoritative HTTP 404 (`Page Not Found`) directory lockout for Cashiers and suspended members. One Playwright end-to-end workflow test executed live in Chromium and passed cleanly (33.6s).
+  - **Overall Automated Test Total**: 322 total automated test cases across all suites (151 unit test cases + 170 integration test cases + 1 Playwright E2E workflow test).
 
 ### Phase 10: Polish & Regression Gate (`T063`–`T065`)
 - **Initial Audit Status**: **PARTIAL** (Defect F-01 / T063 identified)
@@ -171,7 +179,7 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 | **T017** | Migration 09 | RPC: `update_organization_member_status`| Self-mod (P0024), terminal (P0025), P0020, P0002 | `employee-rbac.test.ts` | **PASS** |
 | **T018** | Migration 09 | RPC: `get_organization_employees` | employees:read gate, minimal projection | `employee-rbac.test.ts` | **PASS** |
 | **T019** | Migration 09 | DB Hardening: search path, postgres owner | search_path locked, PUBLIC/anon revoked | `database-security.test.ts` | **PASS** |
-| **T020** | `database-security.test.ts` | Verify DB security posture & grants | 13 integration tests asserting catalog metadata | Passes (13/13) | **PASS** |
+| **T020** | `database-security.test.ts` | Verify DB security posture & grants | 14 integration tests asserting catalog metadata | Passes (14/14) | **PASS** |
 | **T021** | `permissions.ts` | Implement `hasPermission` 4-rule engine | Catalog bounding, active check, Owner access | `permissions.test.ts` | **PASS** |
 | **T022** | `context.ts` | Populate `context.permissions` | Dynamic resolution in `resolveTenantContext` | `context.test.ts` | **PASS** |
 | **T023** | `validations/employee.ts` | Employee Zod schemas | Role, status, removal schemas | `employee.test.ts` | **PASS** |
@@ -215,7 +223,7 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 | **T061** | `employee-rbac.test.ts` | Integration: Tenant isolation & directory | Cashier denied (P0005), revoked excluded | Passes | **PASS** |
 | **T062** | `employee-management.spec.ts`| Playwright E2E workflow test | One end-to-end workflow test in live Chromium | Passes (33.6s) | **PASS** |
 | **T063** | `src/types/database.ts` | Regenerate Supabase TypeScript types | Re-encoded as UTF-8 without BOM | tsc & next build pass | **PASS** |
-| **T064** | Test suites | Feature 001 regression tests | All 14 unit (151) + 15 integration (170) suites pass | Passes (321/321) | **PASS** |
+| **T064** | Test suites | Feature 001 regression tests | 14 unit test files (151 test cases) + 15 integration test files (170 test cases) pass | Passes (321/321) | **PASS** |
 | **T065** | `quickstart.md` | Developer walkthrough | Step-by-step verification instructions verified | Document review | **PASS** |
 
 ---
@@ -332,7 +340,8 @@ The TypeScript resolver (`hasPermission`) and PostgreSQL helper (`check_user_per
 
 - **Authentication & Sessions**: All existing Feature 001 auth triggers, session revocation tests, and profile password tests pass 100%.
 - **Organization Creation & Onboarding**: All Feature 001 onboarding and organization switching tests pass 100%.
-- **Total Existing Tests**: 150 unit tests and 166 integration tests execute and pass cleanly. Zero Feature 001 regressions detected.
+- **Historical Feature 001 Baseline**: The original Feature 001 baseline comprises 123 unit test cases (across 11 test files) and 128 integration test cases (across 11 test files), totaling 251 automated baseline tests. All 251 baseline tests continue to execute and pass cleanly with zero regressions.
+- **Clarification on Pre-Remediation Totals**: The previously cited figures of "150 unit tests and 166 integration tests" (316 total tests) represented the outdated pre-remediation project-wide test count from initial implementation commit `e4c130b`, rather than the Feature 001 baseline alone. Following the Round 1 remediation (commit `eca0b8f`), 1 additional unit test and 4 additional integration tests were added to verify security and rejoining invariants. The full project test suite now stands at 151 unit test cases (14 files) and 170 integration test cases (15 files), totaling 321 automated Vitest tests (plus 1 Playwright E2E workflow test), all passing with 100% success.
 
 ---
 
