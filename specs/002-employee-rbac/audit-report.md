@@ -15,15 +15,15 @@
 This independent code audit evaluated the implementation of **Feature 002: Employee Management & Role-Based Access Control (RBAC)** in BizFlow AI against the project specification, plan, database contracts, server action contracts, and Constitution v1.1.0.
 
 ### Key Strengths
-- **Database Architecture & PostgreSQL Security**: All 10 stored procedures (`SECURITY DEFINER`) are properly owned by `postgres`, have their `search_path` strictly locked to `pg_catalog, public, pg_temp`, have default execution to `PUBLIC` and `anon` revoked, and enforce robust authorization and input validation independent of client or Zod validation.
+- **Database Architecture & PostgreSQL Security**: All 10 stored procedures (`SECURITY DEFINER`) are properly owned by `postgres`, have their `search_path` strictly locked to `pg_catalog, public, pg_temp`, have execution revoked from `PUBLIC` and `anon` by default (with `anon` granted exclusively to `validate_invitation_token` for anonymous pre-flight validation), grant execution to `authenticated` and `service_role`, and enforce robust authorization and input validation independent of client or Zod validation.
 - **Strict Multi-Tenancy & RLS**: `FORCE ROW LEVEL SECURITY` is enabled and verified on `organization_invitations`, `permissions`, and `role_permissions`. Client-side direct mutations are denied (`42501`). Multi-tenant isolation is preserved: soft revocation in one organization has zero impact on active memberships in other organizations.
 - **Centralized 4-Rule Permission Engine**: The permission engine (`hasPermission`) in TypeScript and `check_user_permission` in PostgreSQL are 100% synchronized and strictly bound to the catalog. Unknown or unregistered permission strings evaluate to `false` for all roles, including Owner.
-- **Unit, Integration & E2E Test Coverage**: All 14 unit test files (151 tests) and 15 integration test files (170 tests) pass cleanly. In addition, the full end-to-end browser workflow in Chromium passes cleanly (322 automated tests total). Zero regressions were introduced to Feature 001.
+- **Unit, Integration & E2E Test Coverage**: All 14 unit test files (151 tests) and 15 integration test files (170 tests) pass cleanly (321 automated Vitest tests). In addition, one Playwright end-to-end workflow test passed in Chromium (322 automated tests total across all suites). Zero regressions were introduced to Feature 001.
 
 ### Controlled Remediation Summary
 All three original audit findings (F-01, F-02, F-03) and three additional database concerns (C-01, C-02, C-03) were fully resolved:
 1. **F-01 [Resolved]**: Re-encoded `src/types/database.ts` as UTF-8 without BOM. `next lint` and `next build` pass with 0 errors.
-2. **F-02 [Resolved]**: Aligned E2E selectors in `tests/e2e/employee-management.spec.ts` with actual UI headings and 404 Page Not Found / onboarding lockout behaviors. Executed in Chromium and verified passing (28.2s).
+2. **F-02 [Resolved]**: Aligned E2E selectors in `tests/e2e/employee-management.spec.ts` with actual UI headings and 404 Page Not Found / onboarding lockout behaviors. One Playwright end-to-end workflow test executed in Chromium and verified passing (33.6s).
 3. **F-03 [Resolved]**: Corrected query parameters in `AcceptInvitationCard.tsx` to `?next=` and `?token=`; updated `signInAction` to preserve `redirectTo` when user has 0 active organizations.
 4. **C-01 [Resolved]**: Resolved the revoked membership policy contradiction by implementing a controlled, audited rejoining flow via fresh invitations:
    - `create_organization_invitation()` allows inviting a previously revoked user (while rejecting active members with `P0021` and suspended members with `P0027`).
@@ -52,7 +52,7 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 - `src/components/layout/TenantHeader.tsx`: Added `<TenantNav slug={organization.slug} role={role} />`.
 - `src/lib/auth/context.ts`: Added permission catalog evaluation to `resolveTenantContext` and exported alias `requireTenantContext`.
 - `src/types/auth.ts`: Added `InvitationStatus`, `PermissionKey`, and `permissions: PermissionKey[]` to `TenantContext`.
-- `src/types/database.ts`: Regenerated types (contains encoding defect).
+- `src/types/database.ts`: Regenerated Supabase TypeScript types (initial audit UTF-16 BOM defect resolved in remediation commit via clean UTF-8 encoding).
 - `specs/002-employee-rbac/tasks.md`: Marked tasks complete.
 
 ---
@@ -96,8 +96,8 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
     9. `get_organization_employees` (SECURITY DEFINER, STABLE)
     10. `check_user_permission` (SECURITY DEFINER, STABLE)
   - Ownership set to `postgres`. Search path locked to `pg_catalog, public, pg_temp`.
-  - Default execution revoked from `PUBLIC` and `anon`. Explicit grants given to `authenticated` and `service_role` (and `validate_invitation_token` to `anon`).
-  - Verified with 13 automated tests in `tests/integration/database-security.test.ts`.
+  - Default execution privileges were revoked from `PUBLIC`. Execution privileges for `anon` were revoked by default on all functions, with an explicit `EXECUTE` grant given to `anon` exclusively on `validate_invitation_token` to permit unauthenticated pre-flight token validation without data disclosure. All 10 functions grant `EXECUTE` to `authenticated` and `service_role`.
+  - Verified with 14 automated tests in `tests/integration/database-security.test.ts`.
 
 ### Phase 5: Permission Engine and Tenant Context (`T021`–`T022`, `T046`–`T047`)
 - **Status**: **PASS**
@@ -136,7 +136,7 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 - **Post-Remediation Status**: **PASS**
 - **Findings & Remediation**:
   - T046–T061: All 17 automated unit and integration test suites pass (100% clean).
-  - **Remediated (F-02 / T062)**: `tests/e2e/employee-management.spec.ts` was updated to match the production UI headings (`Workforce & Employees`), tab buttons, scoped table cells, and the authoritative HTTP 404 (`Page Not Found`) directory lockout for Cashiers and suspended members. Executed live in Chromium and passed cleanly (28.2s).
+  - **Remediated (F-02 / T062)**: `tests/e2e/employee-management.spec.ts` was updated to match the production UI headings (`Workforce & Employees`), tab buttons, scoped table cells, and the authoritative HTTP 404 (`Page Not Found`) directory lockout for Cashiers and suspended members. One Playwright end-to-end workflow test executed live in Chromium and passed cleanly (33.6s).
 
 ### Phase 10: Polish & Regression Gate (`T063`–`T065`)
 - **Initial Audit Status**: **PARTIAL** (Defect F-01 / T063 identified)
@@ -213,9 +213,9 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 | **T059** | `employee-rbac.test.ts` | Integration: Multi-tenant isolation | Revoking in Org A leaves Org B active | Passes | **PASS** |
 | **T060** | `employee-rbac.test.ts` | Integration: Authorization freshness | Immediate lockout on next request (0s delay) | Passes | **PASS** |
 | **T061** | `employee-rbac.test.ts` | Integration: Tenant isolation & directory | Cashier denied (P0005), revoked excluded | Passes | **PASS** |
-| **T062** | `employee-management.spec.ts`| Playwright E2E full workflow | End-to-end lifecycle in live Chromium | Passes (28.2s) | **PASS** |
+| **T062** | `employee-management.spec.ts`| Playwright E2E workflow test | One end-to-end workflow test in live Chromium | Passes (33.6s) | **PASS** |
 | **T063** | `src/types/database.ts` | Regenerate Supabase TypeScript types | Re-encoded as UTF-8 without BOM | tsc & next build pass | **PASS** |
-| **T064** | Test suites | Feature 001 regression tests | All 14 unit + 15 integration suites pass | Passes (321/321) | **PASS** |
+| **T064** | Test suites | Feature 001 regression tests | All 14 unit (151) + 15 integration (170) suites pass | Passes (321/321) | **PASS** |
 | **T065** | `quickstart.md` | Developer walkthrough | Step-by-step verification instructions verified | Document review | **PASS** |
 
 ---
@@ -239,7 +239,7 @@ All three original audit findings (F-01, F-02, F-03) and three additional databa
 
 ### Security Evaluation
 - **Search Path Isolation**: All 10 functions set `SET search_path = pg_catalog, public, pg_temp`, completely preventing search-path hijacking attacks.
-- **Role Permissions & Default Privileges**: Default PostgreSQL public execution privileges were revoked via `REVOKE ALL ... FROM PUBLIC, anon;`. `validate_invitation_token` is the only function granted to `anon`, strictly returning `{ is_valid, is_expired, status }` without revealing tenant or user data.
+- **Role Permissions & Default Privileges**: Default execution privileges were revoked from `PUBLIC`. Execution privileges for `anon` were revoked by default on all functions, with an explicit `EXECUTE` grant given to `anon` exclusively on `validate_invitation_token` to permit unauthenticated pre-flight token validation without disclosing tenant or user data. All 10 functions grant `EXECUTE` to `authenticated` and `service_role`.
 - **Direct Mutation Immunity**: Authenticated client roles attempting direct SQL `INSERT`, `UPDATE`, or `DELETE` on `organization_invitations`, `permissions`, or `role_permissions` receive PostgreSQL RLS error `42501` (permission denied).
 
 ---
@@ -305,15 +305,11 @@ The TypeScript resolver (`hasPermission`) and PostgreSQL helper (`check_user_per
 - Actions catch database error codes (`P0001`–`P0026`) and return human-readable user messages without exposing stack traces.
 - Cookie management for active organization switching (`bizflow_active_org`) is safely set upon invitation acceptance.
 
-### UI Defect: Query Parameter Incompatibility in `AcceptInvitationCard.tsx`
-In `src/components/invitations/AcceptInvitationCard.tsx`:
-- Line 157: `<Link href={`/sign-in?returnTo=${encodeURIComponent(returnUrl)}`}>`
-- Line 248: `href={`/sign-in?returnTo=${encodeURIComponent(`/invitations/accept?token=${token}`)}`}`
-- Line 164: `<Link href={`/sign-up?pendingInviteToken=${token}`}>`
-
-**Problem**:
-- `SignInForm.tsx` in Feature 001 reads `searchParams.get("next")`. Because `returnTo` is ignored, signing in does not return the user to the invitation acceptance URL.
-- `src/app/(auth)/sign-up/page.tsx` reads `searchParams?.token`. Because `pendingInviteToken` is ignored, the registration flow does not capture the invitation token.
+### Initial Audit Finding — Resolved in Final Remediation: Query Parameter Incompatibility in `AcceptInvitationCard.tsx` (Finding F-03)
+- **Initial Finding**: In `src/components/invitations/AcceptInvitationCard.tsx`, authentication links used query parameters `returnTo` and `pendingInviteToken`, whereas Feature 001 auth pages expect `?next=` and `?token=`.
+- **Status**: **RESOLVED** in Final Remediation (`eca0b8f04814be8bab70baffad28e8f570435965`).
+- **Resolution**: Corrected query parameters in `AcceptInvitationCard.tsx` to `?next=` and `?token=`, and updated `signInAction` in `src/actions/auth-actions.ts` to preserve `redirectTo` when an invited user has 0 active organizations.
+- **Verification**: Verified passing across unit, integration, and live Playwright E2E test execution.
 
 ---
 
@@ -325,10 +321,10 @@ In `src/components/invitations/AcceptInvitationCard.tsx`:
 | `tests/unit/validations/employee.test.ts` | Unit | 8 | PASS | Asserts UUIDs, roles, status transitions |
 | `tests/unit/validations/invitation.test.ts` | Unit | 8 | PASS | Asserts RFC email regex, token length, UUIDs |
 | `tests/integration/permissions-catalog.test.ts` | Integration | 3 | PASS | Real PostgreSQL queries comparing TS catalog vs DB table |
-| `tests/integration/database-security.test.ts` | Integration | 13 | PASS | Real PostgreSQL queries on `pg_proc`, RLS `42501` denial |
-| `tests/integration/invitations-rls.test.ts` | Integration | 11 | PASS | Real Supabase clients: 7d bounds, duplicate P0022, mismatch |
+| `tests/integration/database-security.test.ts` | Integration | 14 | PASS | Real PostgreSQL queries on `pg_proc`, RLS `42501` denial, caller restriction |
+| `tests/integration/invitations-rls.test.ts` | Integration | 11 | PASS | Real Supabase clients: 7d bounds, duplicate P0022, mismatch, rejoining |
 | `tests/integration/employee-rbac.test.ts` | Integration | 14 | PASS | Real Supabase clients: P0020, P0023, P0024, P0025, P0002 |
-| `tests/e2e/employee-management.spec.ts` | E2E | 1 | FAIL | Cannot run (build fails); asserts incorrect redirect URLs |
+| `tests/e2e/employee-management.spec.ts` | E2E | 1 | PASS (Remediated) | One Playwright end-to-end workflow test passed in Chromium (initial FAIL resolved in remediation) |
 
 ---
 
@@ -342,8 +338,10 @@ In `src/components/invitations/AcceptInvitationCard.tsx`:
 
 ## 12. Critical and High-Severity Findings
 
-### Finding F-01: `src/types/database.ts` UTF-16 LE Binary Encoding Breaks `next build` and `next lint`
-- **Severity**: **HIGH**
+### Initial Audit Finding — Resolved in Final Remediation: Finding F-01 — `src/types/database.ts` UTF-16 LE Binary Encoding Breaks `next build` and `next lint`
+- **Initial Severity**: **HIGH**
+- **Initial Status**: **DEFECT**
+- **Final Status**: **RESOLVED** (Remediation Commit `eca0b8f04814be8bab70baffad28e8f570435965`)
 - **Affected File**: [`src/types/database.ts`](file:///c:/Users/Heyru/Desktop/projects/BizFlow-AI/src/types/database.ts)
 - **Description**: Running `npx supabase gen types typescript --local > src/types/database.ts` in Windows PowerShell created the file with UTF-16 LE (Little Endian with BOM) encoding.
 - **Evidence**:
@@ -358,29 +356,36 @@ In `src/components/invitations/AcceptInvitationCard.tsx`:
   Error: Parsing error: File appears to be binary.
   ```
 - **Impact**: Production build cannot be compiled. CI/CD pipeline fails. Playwright cannot run against `npm run start`.
-- **Recommended Correction**: Re-encode `src/types/database.ts` as standard UTF-8 without BOM.
+- **Resolution**: Re-encoded `src/types/database.ts` as standard UTF-8 without BOM.
+- **Verification**: Verified via `npm run lint` (`✔ No ESLint warnings or errors`) and `npm run build` (`Compiled successfully in 17.4s`, exit code 0).
 
 ---
 
 ## 13. Medium and Low-Severity Findings
 
-### Finding F-02: `tests/e2e/employee-management.spec.ts` Contains Broken Redirect Assertions
-- **Severity**: **MEDIUM**
+### Initial Audit Finding — Resolved in Final Remediation: Finding F-02 — `tests/e2e/employee-management.spec.ts` Contains Broken Redirect Assertions
+- **Initial Severity**: **MEDIUM**
+- **Initial Status**: **DEFECT**
+- **Final Status**: **RESOLVED** (Remediation Commit `eca0b8f04814be8bab70baffad28e8f570435965`)
 - **Affected File**: [`tests/e2e/employee-management.spec.ts`](file:///c:/Users/Heyru/Desktop/projects/BizFlow-AI/tests/e2e/employee-management.spec.ts) (lines 142, 172)
 - **Description**:
-  - Line 142 expects `await employeePage.waitForURL(new RegExp('/${orgSlug}/dashboard'))` when a Cashier visits `/[slug]/employees`. In reality, the server calls `notFound()`, serving HTTP 404 to prevent directory discovery.
-  - Line 172 expects `await employeePage.waitForURL(new RegExp('/${orgSlug}/suspended|/onboarding'))` when a suspended member accesses the workspace. In reality, `getTenantContext` calls `notFound()` (404 Not Found).
-- **Impact**: The E2E test would time out even if the application were running.
-- **Recommended Correction**: Update the Playwright test assertions to expect HTTP 404 and "Page Not Found", matching the Feature 001 `tenant-isolation.spec.ts` pattern.
+  - Line 142 expected `await employeePage.waitForURL(new RegExp('/${orgSlug}/dashboard'))` when a Cashier visits `/[slug]/employees`. In reality, the server calls `notFound()`, serving HTTP 404 to prevent directory discovery.
+  - Line 172 expected `await employeePage.waitForURL(new RegExp('/${orgSlug}/suspended|/onboarding'))` when a suspended member accesses the workspace. In reality, `getTenantContext` calls `notFound()` (404 Not Found).
+- **Impact**: The E2E test timed out even when the application was functioning properly.
+- **Resolution**: Updated Playwright test assertions to match production UI headings (`Workforce & Employees`), tab buttons, scoped table cells, and authoritative HTTP 404 (`Page Not Found`) directory lockout.
+- **Verification**: One Playwright end-to-end workflow test executed live in Chromium and passed cleanly in 33.6s.
 
-### Finding F-03: Query Parameter Incompatibility in `AcceptInvitationCard.tsx`
-- **Severity**: **MEDIUM**
+### Initial Audit Finding — Resolved in Final Remediation: Finding F-03 — Query Parameter Incompatibility in `AcceptInvitationCard.tsx`
+- **Initial Severity**: **MEDIUM**
+- **Initial Status**: **DEFECT**
+- **Final Status**: **RESOLVED** (Remediation Commit `eca0b8f04814be8bab70baffad28e8f570435965`)
 - **Affected File**: [`src/components/invitations/AcceptInvitationCard.tsx`](file:///c:/Users/Heyru/Desktop/projects/BizFlow-AI/src/components/invitations/AcceptInvitationCard.tsx) (lines 157, 164, 248)
 - **Description**:
-  - The card links to `/sign-in?returnTo=...` instead of `/sign-in?next=...`.
-  - The card links to `/sign-up?pendingInviteToken=...` instead of `/sign-up?token=...`.
-- **Impact**: When unauthenticated users click these buttons to sign in or sign up, Feature 001 auth pages do not read `returnTo` or `pendingInviteToken`, causing the user to lose their return flow to the invitation acceptance screen.
-- **Recommended Correction**: Change `returnTo` to `next` and `pendingInviteToken` to `token` in `AcceptInvitationCard.tsx`.
+  - The card linked to `/sign-in?returnTo=...` instead of `/sign-in?next=...`.
+  - The card linked to `/sign-up?pendingInviteToken=...` instead of `/sign-up?token=...`.
+- **Impact**: When unauthenticated users clicked these buttons to sign in or sign up, Feature 001 auth pages did not read `returnTo` or `pendingInviteToken`, causing the user to lose their return flow to the invitation acceptance screen.
+- **Resolution**: Changed `returnTo` to `next` and `pendingInviteToken` to `token` in `AcceptInvitationCard.tsx`; updated `signInAction` in `src/actions/auth-actions.ts` to preserve `redirectTo` when user has 0 active organizations.
+- **Verification**: Verified in unit, integration, and live Playwright E2E test execution.
 
 ---
 
@@ -441,7 +446,7 @@ All findings from the initial audit report and the three additional database con
 | Finding / Concern | Issue | File(s) Modified | Correction | Regression Test |
 |---|---|---|---|---|
 | **F-01** [High] | UTF-16 LE BOM encoding broke `next build` and `next lint` | `src/types/database.ts` | Re-encoded to valid UTF-8 without BOM | Verified via `npm run lint` and `npm run build` |
-| **F-02** [Medium] | E2E assertions expected redirects instead of HTTP 404 Page Not Found | `tests/e2e/employee-management.spec.ts` | Updated selectors to match `Workforce & Employees`, `Active Directory`, and `Page Not Found` | Live Chromium execution: `tests/e2e/employee-management.spec.ts` passed (30.2s) |
+| **F-02** [Medium] | E2E assertions expected redirects instead of HTTP 404 Page Not Found | `tests/e2e/employee-management.spec.ts` | Updated selectors to match `Workforce & Employees`, `Active Directory`, and `Page Not Found` | One Playwright end-to-end workflow test passed in Chromium (33.6s) |
 | **F-03** [Medium] | Query params `returnTo` and `pendingInviteToken` mismatched Feature 001 auth routes | `src/components/invitations/AcceptInvitationCard.tsx`, `src/actions/auth-actions.ts` | Aligned to `?next=` and `?token=`; updated `signInAction` to preserve `redirectTo` when user has 0 active organizations | Covered in Playwright E2E and invitation acceptance tests |
 | **C-01** [High] | Policy contradiction: terminal revocation vs revoked rejoining | `supabase/migrations/20261103000009_employee_management_rbac.sql`, `specs/002-employee-rbac/` | Allowed fresh invite creation for revoked members; implemented controlled audited rejoining in `accept_organization_invitation`; retained terminal guard `P0025` for direct member updates | `tests/integration/invitations-rls.test.ts` (3 tests verifying rejoining & suspension blocks) |
 | **C-02** [Medium] | `check_user_permission` exposed other users' authorization info to authenticated callers | `supabase/migrations/20261103000009_employee_management_rbac.sql` | Restricted direct authenticated invocation to `auth.uid() = p_user_id` | `tests/integration/database-security.test.ts` (1 test added) |
@@ -458,8 +463,8 @@ All findings from the initial audit report and the three additional database con
 4. **Integration Tests (`npm run test:integration`)**:
    - Status: **PASSED** (15 test files, 170 tests passed, 0 failed).
 5. **Playwright E2E Tests (`npx playwright test tests/e2e/employee-management.spec.ts`)**:
-   - Status: **PASSED** (1 test passed in Chromium, 30.2s duration).
-   - Verified complete workflow: owner sign-in $\rightarrow$ directory navigation $\rightarrow$ invitation creation $\rightarrow$ employee sign-in $\rightarrow$ invitation acceptance $\rightarrow$ cashier directory lockout (404 Page Not Found) $\rightarrow$ manager elevation $\rightarrow$ directory access $\rightarrow$ suspension lockout.
+   - Status: **PASSED** (One end-to-end workflow test passed in Chromium, 33.6s duration).
+   - Verified complete multi-step workflow in Chromium: owner sign-in $\rightarrow$ directory navigation $\rightarrow$ invitation creation $\rightarrow$ employee sign-in $\rightarrow$ invitation acceptance $\rightarrow$ cashier directory lockout (404 Page Not Found) $\rightarrow$ manager elevation $\rightarrow$ directory access $\rightarrow$ suspension lockout.
 6. **Production Build (`npm run build`)**:
    - Status: **PASSED** (exit code 0; all 13 routes optimized, static pages generated).
 7. **Database Security Verification (`tests/integration/database-security.test.ts`)**:
@@ -474,7 +479,7 @@ All findings from the initial audit report and the three additional database con
 **Reasoning**:  
 All three original findings (F-01, F-02, F-03) and all three additional database-level security concerns (C-01, C-02, C-03) have been fully investigated, corrected, and verified with dedicated regression tests.
 
-The full automated test suite (151 unit tests, 170 integration tests, 1 Playwright E2E test — 322 automated tests total) passes cleanly with 0 failures. TypeScript type checking and ESLint pass with 0 errors/warnings, and the production build (`next build`) compiles cleanly. Database security posture, PostgreSQL row-level security, tenant isolation, and the 4-rule permission engine parity are completely intact and verified.
+The full automated test suite (151 unit tests, 170 integration tests [321 automated Vitest tests], plus one Playwright end-to-end workflow test in Chromium — 322 automated tests total across all suites) passes cleanly with 0 failures. TypeScript type checking and ESLint pass with 0 errors/warnings, and the production build (`next build`) compiles cleanly. Database security posture, PostgreSQL row-level security, tenant isolation, and the 4-rule permission engine parity are completely intact and verified.
 
 Feature 002 is production-ready and approved for merge review.
 
