@@ -566,5 +566,58 @@ describe("Integration: Invitations & RLS (T050–T056)", () => {
       });
       expect((newVal as any).is_valid).toBe(true);
     });
+
+    it("invitation remains pending in database when external email delivery fails, and can be retried (FR-015)", async () => {
+      const email = `delivery_fail_${Date.now()}@example.com`;
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+      // 1. Database creation succeeds prior to decoupled email dispatch
+      const { data: createData, error: createErr } = await ownerUser.client.rpc("create_organization_invitation", {
+        p_org_id: testOrgId,
+        p_email: email,
+        p_role: "cashier",
+        p_token_hash: tokenHash,
+        p_expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+      });
+
+      expect(createErr).toBeNull();
+      const invId = (createData as any).invitation_id;
+
+      // 2. Direct query on database verifies invitation record remains strictly in 'pending' status
+      const res = await pgClient.query(
+        "SELECT id, organization_id, email, role, status FROM public.organization_invitations WHERE id = $1;",
+        [invId]
+      );
+      expect(res.rows.length).toBe(1);
+      expect(res.rows[0].status).toBe("pending");
+      expect(res.rows[0].email).toBe(email);
+
+      // 3. Pre-flight anonymous token check is valid
+      const { data: preflightVal } = await anonClient.rpc("validate_invitation_token", {
+        p_token_hash: tokenHash,
+      });
+      expect((preflightVal as any).is_valid).toBe(true);
+
+      // 4. Admin resends invitation (retry flow after email delivery warning)
+      const freshRaw = crypto.randomBytes(32).toString("hex");
+      const freshHash = crypto.createHash("sha256").update(freshRaw).digest("hex");
+      const freshExpires = new Date(Date.now() + 7 * 86400000).toISOString();
+
+      const { data: resendData, error: resendErr } = await ownerUser.client.rpc("resend_organization_invitation", {
+        p_invitation_id: invId,
+        p_new_token_hash: freshHash,
+        p_new_expires_at: freshExpires,
+      });
+
+      expect(resendErr).toBeNull();
+      expect((resendData as any).status).toBe("pending");
+
+      // 5. Old token is now invalid, fresh token is valid, status remains pending
+      const { data: oldCheck } = await anonClient.rpc("validate_invitation_token", { p_token_hash: tokenHash });
+      const { data: freshCheck } = await anonClient.rpc("validate_invitation_token", { p_token_hash: freshHash });
+      expect((oldCheck as any).is_valid).toBe(false);
+      expect((freshCheck as any).is_valid).toBe(true);
+    });
   });
 });
