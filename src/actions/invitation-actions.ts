@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { createClient, getSafeCookieStore } from "@/lib/supabase/server";
 import { resolveTenantContext } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/auth/permissions";
-import { sendInvitationEmail } from "@/lib/email/invitation-mailer";
+import { sendInvitationEmail, buildInvitationUrl } from "@/lib/email/invitation-mailer";
 import {
   inviteEmployeeSchema,
   resendInvitationSchema,
@@ -171,9 +171,26 @@ export async function inviteEmployeeAction(
       expires_at: string;
     };
 
-    // Construct invitation link
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const invitationUrl = `${appUrl}/invitations/accept?token=${rawToken}`;
+    // Construct normalized invitation link using URL API
+    let invitationUrl: string;
+    try {
+      invitationUrl = buildInvitationUrl(rawToken);
+    } catch (urlErr) {
+      console.error(
+        "[INVITATION URL] Construction failed:",
+        urlErr instanceof Error ? urlErr.message : "Invalid URL configuration"
+      );
+      const result: InviteEmployeeResult = {
+        invitationId: rpcData.invitation_id,
+        organizationId: rpcData.organization_id,
+        email: rpcData.email,
+        role: rpcData.role,
+        status: "pending",
+        expiresAt: rpcData.expires_at,
+        warning: "EMAIL_DELIVERY_FAILED",
+      };
+      return { success: true, data: result };
+    }
 
     // Dispatched decoupled outside transaction
     const emailRes = await sendInvitationEmail({
@@ -267,8 +284,26 @@ export async function resendInvitationAction(
       expires_at: string;
     };
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const invitationUrl = `${appUrl}/invitations/accept?token=${rawToken}`;
+    // Construct normalized invitation link using URL API
+    let invitationUrl: string;
+    try {
+      invitationUrl = buildInvitationUrl(rawToken);
+    } catch (urlErr) {
+      console.error(
+        "[INVITATION URL] Construction failed:",
+        urlErr instanceof Error ? urlErr.message : "Invalid URL configuration"
+      );
+      const result: ResendInvitationResult = {
+        invitationId: rpcData.invitation_id,
+        organizationId: rpcData.organization_id,
+        email: rpcData.email,
+        role: rpcData.role,
+        status: "pending",
+        expiresAt: rpcData.expires_at,
+        warning: "EMAIL_DELIVERY_FAILED",
+      };
+      return { success: true, data: result };
+    }
 
     const emailRes = await sendInvitationEmail({
       recipientEmail: rpcData.email,

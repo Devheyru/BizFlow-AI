@@ -6,6 +6,8 @@
  * returning a structured result so the caller can return a partial warning to the user.
  */
 
+import { getSafeMailerConfig } from "@/lib/env";
+
 export interface SendInvitationEmailParams {
   recipientEmail: string;
   organizationName: string;
@@ -17,7 +19,14 @@ export interface SendInvitationEmailParams {
 export interface SendInvitationEmailResult {
   success: boolean;
   error?: string;
+  errorCode?: string;
   messageId?: string;
+}
+
+export interface UrlInspectionResult {
+  valid: boolean;
+  errorCode?: string;
+  reason?: string;
 }
 
 /**
@@ -33,41 +42,131 @@ export function escapeHtml(str: string): string {
 }
 
 /**
- * Sanitizes error messages to prevent leaking API keys, bearer tokens, or sensitive URL params.
+ * Sanitizes error messages to prevent leaking API keys, bearer tokens, sensitive URL params, or emails.
  */
 export function sanitizeErrorMessage(msg: string): string {
   return msg
     .replace(/re_[a-zA-Z0-9_]+/g, "[REDACTED_API_KEY]")
     .replace(/Bearer\s+[a-zA-Z0-9_.-]+/gi, "Bearer [REDACTED]")
-    .replace(/[?&]token=[a-f0-9]+/gi, "?token=[REDACTED]");
+    .replace(/[?&]token=[^&\s]+/gi, "?token=[REDACTED]")
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[REDACTED_EMAIL]");
+}
+
+/**
+ * Constructs a normalized invitation URL using the JavaScript URL API.
+ * Ensures the target route is strictly `/invitations/accept` with the `token` search parameter.
+ * Rejects invalid URLs or URLs without http/https protocol.
+ */
+export function buildInvitationUrl(rawToken: string, baseAppUrl?: string): string {
+  const token = rawToken?.trim();
+  if (!token) {
+    throw new Error("Invitation token cannot be empty");
+  }
+
+  const rawBase = (baseAppUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").trim();
+  if (!rawBase) {
+    throw new Error("Application base URL cannot be empty");
+  }
+
+  let parsedBase: URL;
+  try {
+    parsedBase = new URL(rawBase);
+  } catch {
+    throw new Error(`Invalid application base URL: "${rawBase}" is not a valid absolute URL`);
+  }
+
+  if (parsedBase.protocol !== "http:" && parsedBase.protocol !== "https:") {
+    throw new Error(`Invalid application base URL protocol: "${parsedBase.protocol}" (must be http: or https:)`);
+  }
+
+  // Construct /invitations/accept on the validated origin
+  const invitationUrl = new URL("/invitations/accept", parsedBase.origin);
+  invitationUrl.searchParams.set("token", token);
+
+  return invitationUrl.toString();
+}
+
+/**
+ * Inspects an invitation URL against strict security criteria:
+ * - Absolute URL with http: or https:
+ * - Exact origin matching configured application base URL (safely handling trailing slashes)
+ * - Exact /invitations/accept pathname (normalizing redundant slashes)
+ * - Non-empty token search parameter
+ */
+export function inspectInvitationUrl(urlStr: string, expectedAppUrl?: string): UrlInspectionResult {
+  if (!urlStr || typeof urlStr !== "string" || urlStr.trim().length === 0) {
+    return { valid: false, errorCode: "PREFLIGHT_MISSING_INVITATION_URL", reason: "Invitation URL is required" };
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(urlStr.trim());
+  } catch {
+    return { valid: false, errorCode: "PREFLIGHT_URL_MALFORMED", reason: "Invitation URL is not a valid absolute URL" };
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    return {
+      valid: false,
+      errorCode: "PREFLIGHT_URL_INVALID_PROTOCOL",
+      reason: `Invalid URL protocol: "${parsedUrl.protocol}" (must be http: or https:)`,
+    };
+  }
+
+  const rawExpected = (expectedAppUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").trim();
+  let parsedExpected: URL;
+  try {
+    parsedExpected = new URL(rawExpected);
+  } catch {
+    return {
+      valid: false,
+      errorCode: "PREFLIGHT_APP_BASE_URL_INVALID",
+      reason: "Configured application base URL is invalid",
+    };
+  }
+
+  if (parsedExpected.protocol !== "http:" && parsedExpected.protocol !== "https:") {
+    return {
+      valid: false,
+      errorCode: "PREFLIGHT_APP_BASE_URL_INVALID_PROTOCOL",
+      reason: "Configured application base URL protocol is invalid",
+    };
+  }
+
+  if (parsedUrl.origin !== parsedExpected.origin) {
+    return {
+      valid: false,
+      errorCode: "PREFLIGHT_URL_UNTRUSTED_ORIGIN",
+      reason: "Invitation URL origin does not match trusted application origin",
+    };
+  }
+
+  const normalizedPath = parsedUrl.pathname.replace(/\/+/g, "/");
+  if (normalizedPath !== "/invitations/accept") {
+    return {
+      valid: false,
+      errorCode: "PREFLIGHT_URL_INVALID_PATHNAME",
+      reason: "Invitation URL pathname must be /invitations/accept",
+    };
+  }
+
+  const token = parsedUrl.searchParams.get("token");
+  if (!token || token.trim().length === 0) {
+    return {
+      valid: false,
+      errorCode: "PREFLIGHT_URL_MISSING_TOKEN",
+      reason: "Invitation URL is missing token parameter",
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
  * Validates that the invitation URL origin strictly matches the configured application origin.
  */
-export function validateInvitationUrl(urlStr: string): boolean {
-  try {
-    const parsedUrl = new URL(urlStr);
-    const appUrlStr = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const expectedOrigin = new URL(appUrlStr).origin;
-
-    if (parsedUrl.origin !== expectedOrigin) {
-      return false;
-    }
-
-    if (parsedUrl.pathname !== "/invitations/accept") {
-      return false;
-    }
-
-    const token = parsedUrl.searchParams.get("token");
-    if (!token || token.trim().length === 0) {
-      return false;
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
+export function validateInvitationUrl(urlStr: string, expectedAppUrl?: string): boolean {
+  return inspectInvitationUrl(urlStr, expectedAppUrl).valid;
 }
 
 /**
@@ -77,44 +176,46 @@ export async function sendInvitationEmail(
   params: SendInvitationEmailParams
 ): Promise<SendInvitationEmailResult> {
   try {
-    if (!params.recipientEmail || !params.invitationUrl) {
-      return { success: false, error: "Recipient email and invitation URL are required" };
+    if (!params.recipientEmail || params.recipientEmail.trim().length === 0) {
+      const diagnosticCode = "PREFLIGHT_MISSING_RECIPIENT_EMAIL";
+      const errorMsg = "Recipient email and invitation URL are required";
+      console.error(`[INVITATION EMAIL] Delivery failed [${diagnosticCode}]: ${errorMsg}`);
+      return { success: false, error: errorMsg, errorCode: diagnosticCode };
+    }
+
+    if (!params.invitationUrl || params.invitationUrl.trim().length === 0) {
+      const diagnosticCode = "PREFLIGHT_MISSING_INVITATION_URL";
+      const errorMsg = "Recipient email and invitation URL are required";
+      console.error(`[INVITATION EMAIL] Delivery failed [${diagnosticCode}]: ${errorMsg}`);
+      return { success: false, error: errorMsg, errorCode: diagnosticCode };
     }
 
     // Practical recipient email format check
     const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
     if (!emailRegex.test(params.recipientEmail.trim())) {
-      return { success: false, error: "Invalid recipient email address" };
+      const diagnosticCode = "PREFLIGHT_INVALID_RECIPIENT_EMAIL";
+      const errorMsg = "Invalid recipient email address";
+      console.error(`[INVITATION EMAIL] Delivery failed [${diagnosticCode}]: ${errorMsg}`);
+      return { success: false, error: errorMsg, errorCode: diagnosticCode };
     }
 
     // Origin and format verification for invitation link
-    if (!validateInvitationUrl(params.invitationUrl)) {
-      return { success: false, error: "Invalid invitation URL or untrusted origin" };
+    const urlInspection = inspectInvitationUrl(params.invitationUrl);
+    if (!urlInspection.valid) {
+      const diagnosticCode = urlInspection.errorCode || "PREFLIGHT_INVALID_INVITATION_URL";
+      const errorMsg = "Invalid invitation URL or untrusted origin";
+      console.error(`[INVITATION EMAIL] Delivery failed [${diagnosticCode}]: ${errorMsg}`);
+      return { success: false, error: errorMsg, errorCode: diagnosticCode };
     }
 
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    const emailFrom = process.env.EMAIL_FROM?.trim();
-    const isProduction = process.env.NODE_ENV === "production";
-
-    if (!apiKey) {
-      const errorMsg = isProduction
-        ? "Missing RESEND_API_KEY in production"
-        : "RESEND_API_KEY is not configured";
-      if (isProduction) {
-        console.error(`[INVITATION EMAIL] Delivery failed: ${errorMsg}`);
-      }
-      return { success: false, error: errorMsg };
+    // Environment configuration validation
+    const mailerConfig = getSafeMailerConfig();
+    if (!mailerConfig.success) {
+      console.error(`[INVITATION EMAIL] Delivery failed [${mailerConfig.errorCode}]: ${mailerConfig.error}`);
+      return { success: false, error: mailerConfig.error, errorCode: mailerConfig.errorCode };
     }
 
-    if (!emailFrom) {
-      const errorMsg = isProduction
-        ? "Missing EMAIL_FROM in production"
-        : "EMAIL_FROM is not configured";
-      if (isProduction) {
-        console.error(`[INVITATION EMAIL] Delivery failed: ${errorMsg}`);
-      }
-      return { success: false, error: errorMsg };
-    }
+    const { apiKey, emailFrom } = mailerConfig;
 
     const subject = `You're invited to join ${params.organizationName} on BizFlow AI`;
 
@@ -156,7 +257,7 @@ This invitation link is valid for 7 days. If you did not expect this invitation,
       This invitation link is valid for 7 days. If you did not expect this invitation, you can safely ignore this email.
     </p>
   </div>
-</body>
+ </body>
 </html>`;
 
     const resendEndpoint = "https://api.resend.com/emails";
@@ -193,25 +294,29 @@ This invitation link is valid for 7 days. If you did not expect this invitation,
       }
 
       const sanitizedError = sanitizeErrorMessage(providerErrorMsg);
-      console.warn(`[INVITATION EMAIL] Delivery failed: Provider rejected request (status: ${response.status})`);
-      return { success: false, error: sanitizedError };
+      const diagnosticCode = `PROVIDER_HTTP_${response.status}`;
+      console.error(`[INVITATION EMAIL] Delivery failed [${diagnosticCode}]: Status ${response.status} - ${sanitizedError}`);
+      return { success: false, error: sanitizedError, errorCode: diagnosticCode };
     }
 
     const data = (await response.json().catch(() => null)) as { id?: string } | null;
     if (!data || typeof data !== "object" || !data.id || typeof data.id !== "string") {
-      console.warn("[INVITATION EMAIL] Delivery failed: Invalid response format from Resend");
-      return { success: false, error: "Invalid provider response format" };
+      const diagnosticCode = "PROVIDER_INVALID_RESPONSE_FORMAT";
+      const errorMsg = "Invalid provider response format";
+      console.error(`[INVITATION EMAIL] Delivery failed [${diagnosticCode}]: ${errorMsg}`);
+      return { success: false, error: errorMsg, errorCode: diagnosticCode };
     }
 
     if (process.env.NODE_ENV !== "test") {
-      console.log(`[INVITATION EMAIL] Dispatched to ${params.recipientEmail} via Resend (ID: ${data.id})`);
+      console.log(`[INVITATION EMAIL] Dispatched via Resend (ID: ${data.id})`);
     }
 
     return { success: true, messageId: data.id };
   } catch (err: unknown) {
     const rawMessage = err instanceof Error ? err.message : "Network error during email dispatch";
     const sanitizedError = sanitizeErrorMessage(rawMessage);
-    console.warn(`[INVITATION EMAIL] Delivery failed: ${sanitizedError}`);
-    return { success: false, error: sanitizedError };
+    const diagnosticCode = "NETWORK_DISPATCH_ERROR";
+    console.error(`[INVITATION EMAIL] Delivery failed [${diagnosticCode}]: ${sanitizedError}`);
+    return { success: false, error: sanitizedError, errorCode: diagnosticCode };
   }
 }

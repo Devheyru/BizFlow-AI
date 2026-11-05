@@ -14,9 +14,13 @@ vi.mock("@/lib/supabase/server", () => ({
   getSafeCookieStore: vi.fn(),
 }));
 
-vi.mock("@/lib/email/invitation-mailer", () => ({
-  sendInvitationEmail: vi.fn(),
-}));
+vi.mock("@/lib/email/invitation-mailer", async (importOriginal) => {
+  const actual = await importOriginal<typeof mailer>();
+  return {
+    ...actual,
+    sendInvitationEmail: vi.fn(),
+  };
+});
 
 describe("Invitation Server Actions Email Delivery Warning Tests", () => {
   const mockOrgId = "c0000000-0000-4000-8000-000000000001";
@@ -195,6 +199,102 @@ describe("Invitation Server Actions Email Delivery Warning Tests", () => {
       expect(result.data.invitationId).toBe(mockInvId);
       expect(result.data.status).toBe("pending");
       expect(result.data.warning).toBeUndefined();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11. URL normalization in invite and resend actions
+  // ---------------------------------------------------------------------------
+  it("inviteEmployeeAction passes normalized URL without duplicate slashes when NEXT_PUBLIC_APP_URL has trailing slashes", async () => {
+    const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "https://bizflow.ai///";
+
+    try {
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: {
+          invitation_id: mockInvId,
+          organization_id: mockOrgId,
+          email: "newemployee@example.com",
+          role: "cashier",
+          status: "pending",
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        },
+        error: null,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: mockRpc,
+      } as any);
+
+      vi.mocked(mailer.sendInvitationEmail).mockResolvedValue({
+        success: true,
+        messageId: "msg_norm_1",
+      });
+
+      const result = await inviteEmployeeAction(mockSlug, {
+        organizationId: mockOrgId,
+        email: "newemployee@example.com",
+        role: "cashier",
+      });
+
+      expect(result.success).toBe(true);
+      expect(mailer.sendInvitationEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invitationUrl: expect.stringMatching(/^https:\/\/bizflow\.ai\/invitations\/accept\?token=[a-f0-9]{64}$/),
+        })
+      );
+      // Explicitly check there is no double slash before invitations
+      const firstCall = vi.mocked(mailer.sendInvitationEmail).mock.calls[0];
+      expect(firstCall).toBeDefined();
+      const calledUrl = (firstCall?.[0] as any)?.invitationUrl;
+      expect(calledUrl).not.toContain("ai//");
+    } finally {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+    }
+  });
+
+  it("resendInvitationAction passes normalized URL without duplicate slashes when NEXT_PUBLIC_APP_URL has trailing slashes", async () => {
+    const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "https://bizflow.ai/";
+
+    try {
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: {
+          invitation_id: mockInvId,
+          organization_id: mockOrgId,
+          email: "existing@example.com",
+          role: "manager",
+          status: "pending",
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        },
+        error: null,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: mockRpc,
+      } as any);
+
+      vi.mocked(mailer.sendInvitationEmail).mockResolvedValue({
+        success: true,
+        messageId: "msg_norm_2",
+      });
+
+      const result = await resendInvitationAction(mockSlug, {
+        invitationId: mockInvId,
+      });
+
+      expect(result.success).toBe(true);
+      expect(mailer.sendInvitationEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invitationUrl: expect.stringMatching(/^https:\/\/bizflow\.ai\/invitations\/accept\?token=[a-f0-9]{64}$/),
+        })
+      );
+      const firstCall = vi.mocked(mailer.sendInvitationEmail).mock.calls[0];
+      expect(firstCall).toBeDefined();
+      const calledUrl = (firstCall?.[0] as any)?.invitationUrl;
+      expect(calledUrl).not.toContain("ai//");
+    } finally {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
     }
   });
 });
