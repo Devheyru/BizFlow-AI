@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getEnv, validateRecoveryGrantSecret } from "@/lib/env";
+import { getEnv, validateRecoveryGrantSecret, validateMailerConfig } from "@/lib/env";
 
 describe("Environment Variable Validation", () => {
   const originalEnv = process.env;
@@ -80,6 +80,59 @@ describe("Environment Variable Validation", () => {
       expect(() => validateRecoveryGrantSecret("12345")).toThrow(
         "RECOVERY_GRANT_SECRET must be configured and be at least 32 characters long."
       );
+    });
+  });
+
+  describe("validateMailerConfig", () => {
+    it("returns valid configuration when both RESEND_API_KEY and EMAIL_FROM are present", () => {
+      const config = validateMailerConfig({
+        apiKey: "re_test_key_123",
+        emailFrom: "BizFlow AI <noreply@bizflow.ai>",
+        nodeEnv: "production",
+      });
+
+      expect(config.apiKey).toBe("re_test_key_123");
+      expect(config.emailFrom).toBe("BizFlow AI <noreply@bizflow.ai>");
+    });
+
+    it("throws error in production when RESEND_API_KEY is missing", () => {
+      expect(() =>
+        validateMailerConfig({
+          apiKey: undefined,
+          emailFrom: "noreply@bizflow.ai",
+          nodeEnv: "production",
+        })
+      ).toThrow("Missing or invalid required email configuration in production: RESEND_API_KEY");
+    });
+
+    it("throws error in production when EMAIL_FROM is missing", () => {
+      expect(() =>
+        validateMailerConfig({
+          apiKey: "re_test_key_123",
+          emailFrom: undefined,
+          nodeEnv: "production",
+        })
+      ).toThrow("Missing or invalid required email configuration in production: EMAIL_FROM");
+    });
+
+    it("throws error in production when both variables are missing", () => {
+      expect(() =>
+        validateMailerConfig({
+          apiKey: undefined,
+          emailFrom: undefined,
+          nodeEnv: "production",
+        })
+      ).toThrow("Missing or invalid required email configuration in production: RESEND_API_KEY, EMAIL_FROM");
+    });
+
+    it("throws error when EMAIL_FROM format is invalid", () => {
+      expect(() =>
+        validateMailerConfig({
+          apiKey: "re_test_key_123",
+          emailFrom: "invalid-email-address",
+          nodeEnv: "production",
+        })
+      ).toThrow("EMAIL_FROM");
     });
   });
 });

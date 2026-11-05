@@ -75,6 +75,8 @@ The application validates environment variables at runtime using Zod in [`src/li
 | `NEXT_PUBLIC_APP_URL` | Public / Client & Server | Canonical public URL of the application. **Critical for email callback links.** | `https://bizflow.ai` | Vercel Environment Variables |
 | `RECOVERY_GRANT_SECRET` | **Server-Only Secret** | Dedicated 32-byte cryptographic secret (represented as 64 hex characters with 256 bits of true entropy, min. 32 chars) strictly used for HMAC-SHA256 signing and verification of password recovery grants. **NEVER expose to client.** | Generate with `openssl rand -hex 32` | Vercel Environment Variables |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Server-Only Secret** (Optional in Web App) | Privileged admin key. Used server-side for integration test harnesses and database administrative maintenance. **NEVER expose to client.** | `eyJhbGciOi...` | Vercel Environment Variables (Optional for web runtime) |
+| `RESEND_API_KEY` | **Server-Only Secret** | Secret API key for Resend transactional email dispatch (`https://api.resend.com/emails`). Mandatory in production for employee invitations. **NEVER expose to client.** | `re_123456789...` | Vercel Environment Variables |
+| `EMAIL_FROM` | **Server-Only Setting** | Verified sender address matching your verified custom domain in Resend. Unverified fallback senders are strictly prohibited. | `BizFlow AI <noreply@bizflow.ai>` | Vercel Environment Variables |
 
 > **CRITICAL SECURITY NOTE ON SECRET ENTROPY & HANDLING**:
 > - **Entropy Requirement**: A 32-character human-readable password does NOT contain 256 bits of entropy. For production, generate a cryptographically random 32-byte secret using `openssl rand -hex 32`. This produces a 64-character hexadecimal string representing 256 bits of true cryptographic entropy.
@@ -155,11 +157,15 @@ If executing migrations manually via the Supabase Dashboard SQL Editor, execute 
 
 ---
 
-## 6. Custom SMTP Configuration
+## 6. Email Configuration (Resend)
+
+BizFlow AI requires email delivery across two distinct architectural channels:
+1. **Supabase GoTrue Auth**: Delivery of account registration verification links and password recovery emails via SMTP.
+2. **Feature 002 Employee Invitations**: Delivery of workforce invitation acceptance links directly from Next.js Server Actions via Resend's native REST API (`https://api.resend.com/emails`).
 
 > **WARNING**: Supabase's built-in default email service has a strict rate limit of **30 emails per hour**. In production, using the default service will cause user registration and password recovery emails to fail. A custom SMTP provider is mandatory.
 
-### Setting Up Custom SMTP (Example with Resend)
+### Step 6.1: Setting Up Custom SMTP for Supabase Auth
 
 1. Sign up at [Resend](https://resend.com) and add your custom domain (e.g., `bizflow.ai`).
 2. Add the DKIM, SPF, and DMARC records to your DNS provider.
@@ -173,6 +179,15 @@ If executing migrations manually via the Supabase Dashboard SQL Editor, execute 
    - **Username**: `resend`
    - **Password**: `<your-resend-api-key>`
 5. Click **Save** and test by clicking **Send test email**.
+
+### Step 6.2: Configuring Resend REST API for Employee Invitations (Vercel)
+
+For Feature 002 employee invitations, Next.js Server Actions execute decoupled email delivery outside database transactions using Resend's native HTTPS REST API.
+
+1. In the Vercel Dashboard, navigate to your project's **Settings** → **Environment Variables**:
+   - `RESEND_API_KEY`: Set to your Resend API key (`re_...`). Available for Production and Preview environments.
+   - `EMAIL_FROM`: Set to your verified sender address matching the domain verified in Resend (e.g. `BizFlow AI <noreply@bizflow.ai>`).
+2. Production fails safely with `EMAIL_DELIVERY_FAILED` if either `RESEND_API_KEY` or `EMAIL_FROM` is missing or invalid. Unverified fallback senders are strictly prohibited.
 
 ---
 
