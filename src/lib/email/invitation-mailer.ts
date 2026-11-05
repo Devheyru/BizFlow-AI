@@ -52,10 +52,88 @@ export function sanitizeErrorMessage(msg: string): string {
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[REDACTED_EMAIL]");
 }
 
+export type BaseUrlResolutionResult =
+  | { success: true; origin: string }
+  | { success: false; errorCode: string; error: string };
+
+/**
+ * Resolves and validates the application base URL origin.
+ * Enforces production security invariants:
+ * - Production requires a non-empty NEXT_PUBLIC_APP_URL
+ * - Production strictly requires HTTPS protocol (no localhost fallback, no HTTP)
+ * - Development allows http: (including localhost) or https:
+ * - Safely normalizes trailing slashes to origin
+ * - Ensures explicitly supplied base URLs cannot bypass production HTTPS requirements
+ */
+export function resolveApplicationBaseUrl(
+  baseAppUrl?: string,
+  nodeEnv?: string
+): BaseUrlResolutionResult {
+  const isProduction = (nodeEnv ?? process.env.NODE_ENV) === "production";
+  const rawInput = baseAppUrl?.trim();
+  const rawEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
+
+  let candidate: string | undefined;
+  if (rawInput) {
+    candidate = rawInput;
+  } else if (rawEnv) {
+    candidate = rawEnv;
+  } else if (!isProduction) {
+    candidate = "http://localhost:3000";
+  } else {
+    return {
+      success: false,
+      errorCode: "PREFLIGHT_APP_BASE_URL_MISSING",
+      error: "NEXT_PUBLIC_APP_URL is required in production",
+    };
+  }
+
+  if (!candidate || candidate.length === 0) {
+    return {
+      success: false,
+      errorCode: "PREFLIGHT_APP_BASE_URL_MISSING",
+      error: isProduction
+        ? "NEXT_PUBLIC_APP_URL is required in production"
+        : "Application base URL cannot be empty",
+    };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return {
+      success: false,
+      errorCode: "PREFLIGHT_APP_BASE_URL_INVALID",
+      error: `Invalid application base URL: "${candidate}" is not a valid absolute URL`,
+    };
+  }
+
+  if (isProduction) {
+    if (parsed.protocol !== "https:") {
+      return {
+        success: false,
+        errorCode: "PREFLIGHT_APP_BASE_URL_NON_HTTPS",
+        error: `Invalid application base URL protocol: "${parsed.protocol}" (production requires https:)`,
+      };
+    }
+  } else {
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return {
+        success: false,
+        errorCode: "PREFLIGHT_APP_BASE_URL_INVALID_PROTOCOL",
+        error: `Invalid application base URL protocol: "${parsed.protocol}" (must be http: or https:)`,
+      };
+    }
+  }
+
+  return { success: true, origin: parsed.origin };
+}
+
 /**
  * Constructs a normalized invitation URL using the JavaScript URL API.
  * Ensures the target route is strictly `/invitations/accept` with the `token` search parameter.
- * Rejects invalid URLs or URLs without http/https protocol.
+ * Enforces production HTTPS and origin rules.
  */
 export function buildInvitationUrl(rawToken: string, baseAppUrl?: string): string {
   const token = rawToken?.trim();
@@ -63,24 +141,13 @@ export function buildInvitationUrl(rawToken: string, baseAppUrl?: string): strin
     throw new Error("Invitation token cannot be empty");
   }
 
-  const rawBase = (baseAppUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").trim();
-  if (!rawBase) {
-    throw new Error("Application base URL cannot be empty");
-  }
-
-  let parsedBase: URL;
-  try {
-    parsedBase = new URL(rawBase);
-  } catch {
-    throw new Error(`Invalid application base URL: "${rawBase}" is not a valid absolute URL`);
-  }
-
-  if (parsedBase.protocol !== "http:" && parsedBase.protocol !== "https:") {
-    throw new Error(`Invalid application base URL protocol: "${parsedBase.protocol}" (must be http: or https:)`);
+  const baseResult = resolveApplicationBaseUrl(baseAppUrl);
+  if (!baseResult.success) {
+    throw new Error(baseResult.error);
   }
 
   // Construct /invitations/accept on the validated origin
-  const invitationUrl = new URL("/invitations/accept", parsedBase.origin);
+  const invitationUrl = new URL("/invitations/accept", baseResult.origin);
   invitationUrl.searchParams.set("token", token);
 
   return invitationUrl.toString();
@@ -88,7 +155,7 @@ export function buildInvitationUrl(rawToken: string, baseAppUrl?: string): strin
 
 /**
  * Inspects an invitation URL against strict security criteria:
- * - Absolute URL with http: or https:
+ * - Absolute URL with valid protocol (strictly HTTPS in production)
  * - Exact origin matching configured application base URL (safely handling trailing slashes)
  * - Exact /invitations/accept pathname (normalizing redundant slashes)
  * - Non-empty token search parameter
@@ -98,6 +165,8 @@ export function inspectInvitationUrl(urlStr: string, expectedAppUrl?: string): U
     return { valid: false, errorCode: "PREFLIGHT_MISSING_INVITATION_URL", reason: "Invitation URL is required" };
   }
 
+  const isProduction = process.env.NODE_ENV === "production";
+
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(urlStr.trim());
@@ -105,35 +174,34 @@ export function inspectInvitationUrl(urlStr: string, expectedAppUrl?: string): U
     return { valid: false, errorCode: "PREFLIGHT_URL_MALFORMED", reason: "Invitation URL is not a valid absolute URL" };
   }
 
-  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+  if (isProduction) {
+    if (parsedUrl.protocol !== "https:") {
+      return {
+        valid: false,
+        errorCode: "PREFLIGHT_URL_NON_HTTPS",
+        reason: `Invalid URL protocol: "${parsedUrl.protocol}" (production requires https:)`,
+      };
+    }
+  } else {
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return {
+        valid: false,
+        errorCode: "PREFLIGHT_URL_INVALID_PROTOCOL",
+        reason: `Invalid URL protocol: "${parsedUrl.protocol}" (must be http: or https:)`,
+      };
+    }
+  }
+
+  const baseResult = resolveApplicationBaseUrl(expectedAppUrl);
+  if (!baseResult.success) {
     return {
       valid: false,
-      errorCode: "PREFLIGHT_URL_INVALID_PROTOCOL",
-      reason: `Invalid URL protocol: "${parsedUrl.protocol}" (must be http: or https:)`,
+      errorCode: baseResult.errorCode,
+      reason: baseResult.error,
     };
   }
 
-  const rawExpected = (expectedAppUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").trim();
-  let parsedExpected: URL;
-  try {
-    parsedExpected = new URL(rawExpected);
-  } catch {
-    return {
-      valid: false,
-      errorCode: "PREFLIGHT_APP_BASE_URL_INVALID",
-      reason: "Configured application base URL is invalid",
-    };
-  }
-
-  if (parsedExpected.protocol !== "http:" && parsedExpected.protocol !== "https:") {
-    return {
-      valid: false,
-      errorCode: "PREFLIGHT_APP_BASE_URL_INVALID_PROTOCOL",
-      reason: "Configured application base URL protocol is invalid",
-    };
-  }
-
-  if (parsedUrl.origin !== parsedExpected.origin) {
+  if (parsedUrl.origin !== baseResult.origin) {
     return {
       valid: false,
       errorCode: "PREFLIGHT_URL_UNTRUSTED_ORIGIN",

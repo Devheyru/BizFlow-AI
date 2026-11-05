@@ -6,6 +6,7 @@ import {
   validateInvitationUrl,
   inspectInvitationUrl,
   buildInvitationUrl,
+  resolveApplicationBaseUrl,
   type SendInvitationEmailParams,
 } from "@/lib/email/invitation-mailer";
 
@@ -17,13 +18,13 @@ describe("Transactional Invitation Mailer Unit Tests", () => {
     recipientEmail: "invitee@example.com",
     organizationName: "Acme Corp",
     role: "cashier",
-    invitationUrl: "http://localhost:3000/invitations/accept?token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    invitationUrl: "https://biz-flow-ai-one.vercel.app/invitations/accept?token=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   };
 
   beforeEach(() => {
     process.env = {
       ...originalEnv,
-      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NEXT_PUBLIC_APP_URL: "https://biz-flow-ai-one.vercel.app",
       RESEND_API_KEY: "re_test_mock_api_key_12345",
       EMAIL_FROM: "BizFlow AI <noreply@bizflow.ai>",
     };
@@ -174,7 +175,7 @@ describe("Transactional Invitation Mailer Unit Tests", () => {
       recipientEmail: "cashier@example.com",
       organizationName: "Global Mart",
       role: "cashier",
-      invitationUrl: "http://localhost:3000/invitations/accept?token=tok12345",
+      invitationUrl: "https://biz-flow-ai-one.vercel.app/invitations/accept?token=tok12345",
     });
 
     expect(capturedBody).not.toBeNull();
@@ -184,11 +185,11 @@ describe("Transactional Invitation Mailer Unit Tests", () => {
 
     expect(capturedBody.text).toContain("Global Mart");
     expect(capturedBody.text).toContain("cashier");
-    expect(capturedBody.text).toContain("http://localhost:3000/invitations/accept?token=tok12345");
+    expect(capturedBody.text).toContain("https://biz-flow-ai-one.vercel.app/invitations/accept?token=tok12345");
 
     expect(capturedBody.html).toContain("Global Mart");
     expect(capturedBody.html).toContain("cashier");
-    expect(capturedBody.html).toContain('href="http://localhost:3000/invitations/accept?token=tok12345"');
+    expect(capturedBody.html).toContain('href="https://biz-flow-ai-one.vercel.app/invitations/accept?token=tok12345"');
   });
 
   it("escapes dynamic values inserted into HTML email body to prevent XSS", async () => {
@@ -206,7 +207,7 @@ describe("Transactional Invitation Mailer Unit Tests", () => {
       recipientEmail: "safe@example.com",
       organizationName: `<script>alert("xss")</script>Corp & Co`,
       role: `manager" onclick="alert(1)`,
-      invitationUrl: "http://localhost:3000/invitations/accept?token=token123",
+      invitationUrl: "https://biz-flow-ai-one.vercel.app/invitations/accept?token=token123",
     });
 
     expect(capturedBody.html).not.toContain("<script>alert(\"xss\")</script>");
@@ -226,24 +227,125 @@ describe("Transactional Invitation Mailer Unit Tests", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 7. buildInvitationUrl Tests
+  // 6c. resolveApplicationBaseUrl utility
   // ---------------------------------------------------------------------------
-  describe("buildInvitationUrl", () => {
-    it("constructs correct invitation URL with normal production application URL", () => {
-      const url = buildInvitationUrl("abc123token", "https://bizflow.ai");
-      expect(url).toBe("https://bizflow.ai/invitations/accept?token=abc123token");
+  describe("resolveApplicationBaseUrl utility", () => {
+    it("resolves valid production HTTPS origin", () => {
+      const res = resolveApplicationBaseUrl("https://biz-flow-ai-one.vercel.app/", "production");
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.origin).toBe("https://biz-flow-ai-one.vercel.app");
+      }
     });
 
-    it("handles application URL with trailing slash safely", () => {
-      const url = buildInvitationUrl("abc123token", "https://bizflow.ai/");
-      expect(url).toBe("https://bizflow.ai/invitations/accept?token=abc123token");
-      expect(url).not.toContain("ai//");
+    it("rejects missing configuration in production", () => {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      const res = resolveApplicationBaseUrl(undefined, "production");
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.errorCode).toBe("PREFLIGHT_APP_BASE_URL_MISSING");
+      }
     });
 
-    it("handles application URL with multiple trailing slashes safely", () => {
-      const url = buildInvitationUrl("abc123token", "https://bizflow.ai///");
-      expect(url).toBe("https://bizflow.ai/invitations/accept?token=abc123token");
-      expect(url).not.toContain("ai//");
+    it("rejects non-HTTPS configuration in production", () => {
+      const res = resolveApplicationBaseUrl("http://bizflow.ai", "production");
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.errorCode).toBe("PREFLIGHT_APP_BASE_URL_NON_HTTPS");
+      }
+    });
+
+    it("defaults to localhost:3000 in development when unset", () => {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      const res = resolveApplicationBaseUrl(undefined, "development");
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.origin).toBe("http://localhost:3000");
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 7. buildInvitationUrl & Production URL Handling Tests
+  // ---------------------------------------------------------------------------
+  describe("buildInvitationUrl & Production URL Handling", () => {
+    it("constructs correct invitation URL with normal production HTTPS URL", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      const url = buildInvitationUrl("abc123token");
+      expect(url).toBe("https://biz-flow-ai-one.vercel.app/invitations/accept?token=abc123token");
+    });
+
+    it("handles production application URL with trailing slash safely", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app/";
+      (process.env as any).NODE_ENV = "production";
+
+      const url = buildInvitationUrl("abc123token");
+      expect(url).toBe("https://biz-flow-ai-one.vercel.app/invitations/accept?token=abc123token");
+      expect(url).not.toContain("app//");
+    });
+
+    it("handles production application URL with multiple trailing slashes safely", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app///";
+      (process.env as any).NODE_ENV = "production";
+
+      const url = buildInvitationUrl("abc123token");
+      expect(url).toBe("https://biz-flow-ai-one.vercel.app/invitations/accept?token=abc123token");
+      expect(url).not.toContain("app//");
+    });
+
+    it("fails closed in production when NEXT_PUBLIC_APP_URL is missing", () => {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      (process.env as any).NODE_ENV = "production";
+
+      expect(() => buildInvitationUrl("abc123token")).toThrow(
+        /NEXT_PUBLIC_APP_URL is required in production/i
+      );
+    });
+
+    it("fails closed in production when NEXT_PUBLIC_APP_URL is empty or whitespace", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "   ";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(() => buildInvitationUrl("abc123token")).toThrow(
+        /NEXT_PUBLIC_APP_URL is required in production/i
+      );
+    });
+
+    it("rejects non-HTTPS HTTP URL in production", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "http://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(() => buildInvitationUrl("abc123token")).toThrow(
+        /Invalid application base URL protocol: "http:" \(production requires https:\)/i
+      );
+    });
+
+    it("prevents bypassing production HTTPS with explicitly supplied HTTP base URL", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(() => buildInvitationUrl("abc123token", "http://insecure-bypass.com")).toThrow(
+        /Invalid application base URL protocol: "http:" \(production requires https:\)/i
+      );
+    });
+
+    it("allows localhost HTTP in development when NEXT_PUBLIC_APP_URL is unset", () => {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      (process.env as any).NODE_ENV = "development";
+
+      const url = buildInvitationUrl("devtoken123");
+      expect(url).toBe("http://localhost:3000/invitations/accept?token=devtoken123");
+    });
+
+    it("allows configured localhost HTTP with trailing slashes in development", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000///";
+      (process.env as any).NODE_ENV = "development";
+
+      const url = buildInvitationUrl("devtoken123");
+      expect(url).toBe("http://localhost:3000/invitations/accept?token=devtoken123");
+      expect(url).not.toContain("3000//");
     });
 
     it("rejects application URL with missing URL protocol", () => {
@@ -259,16 +361,17 @@ describe("Transactional Invitation Mailer Unit Tests", () => {
     });
 
     it("rejects unsupported URL protocol", () => {
+      (process.env as any).NODE_ENV = "development";
       expect(() => buildInvitationUrl("abc123token", "ftp://bizflow.ai")).toThrow(
         /Invalid application base URL protocol: "ftp:"/i
       );
     });
 
     it("rejects empty or whitespace invitation token", () => {
-      expect(() => buildInvitationUrl("", "https://bizflow.ai")).toThrow(
+      expect(() => buildInvitationUrl("", "https://biz-flow-ai-one.vercel.app")).toThrow(
         /Invitation token cannot be empty/i
       );
-      expect(() => buildInvitationUrl("   ", "https://bizflow.ai")).toThrow(
+      expect(() => buildInvitationUrl("   ", "https://biz-flow-ai-one.vercel.app")).toThrow(
         /Invitation token cannot be empty/i
       );
     });
@@ -278,58 +381,117 @@ describe("Transactional Invitation Mailer Unit Tests", () => {
   // 8. validateInvitationUrl and inspectInvitationUrl Tests
   // ---------------------------------------------------------------------------
   describe("validateInvitationUrl and inspectInvitationUrl", () => {
-    it("validates trusted origin, correct path, and token presence for normal production URL", () => {
-      expect(validateInvitationUrl("https://bizflow.ai/invitations/accept?token=valid123", "https://bizflow.ai")).toBe(true);
-      expect(validateInvitationUrl("http://localhost:3000/invitations/accept?token=valid123", "http://localhost:3000")).toBe(true);
+    it("validates trusted origin, correct path, and token presence for production HTTPS URL", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept?token=valid123")).toBe(true);
     });
 
-    it("safely handles configured base URL with trailing slash", () => {
-      expect(validateInvitationUrl("https://bizflow.ai/invitations/accept?token=valid123", "https://bizflow.ai/")).toBe(true);
+    it("safely handles configured base URL with trailing slash in production", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app/";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept?token=valid123")).toBe(true);
     });
 
-    it("safely handles configured base URL with multiple trailing slashes", () => {
-      expect(validateInvitationUrl("https://bizflow.ai/invitations/accept?token=valid123", "https://bizflow.ai///")).toBe(true);
+    it("safely handles configured base URL with multiple trailing slashes in production", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app///";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept?token=valid123")).toBe(true);
+    });
+
+    it("fails validation in production when NEXT_PUBLIC_APP_URL is missing", () => {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      (process.env as any).NODE_ENV = "production";
+
+      const inspection = inspectInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept?token=valid123");
+      expect(inspection.valid).toBe(false);
+      expect(inspection.errorCode).toBe("PREFLIGHT_APP_BASE_URL_MISSING");
+      expect(validateInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept?token=valid123")).toBe(false);
+    });
+
+    it("fails validation in production when NEXT_PUBLIC_APP_URL is HTTP", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "http://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      const inspection = inspectInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept?token=valid123");
+      expect(inspection.valid).toBe(false);
+      expect(inspection.errorCode).toBe("PREFLIGHT_APP_BASE_URL_NON_HTTPS");
+    });
+
+    it("rejects non-HTTPS invitation URL in production even if configured base is HTTPS", () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      const inspection = inspectInvitationUrl("http://biz-flow-ai-one.vercel.app/invitations/accept?token=valid123");
+      expect(inspection.valid).toBe(false);
+      expect(inspection.errorCode).toBe("PREFLIGHT_URL_NON_HTTPS");
+    });
+
+    it("allows localhost HTTP URL in development", () => {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+      (process.env as any).NODE_ENV = "development";
+
+      expect(validateInvitationUrl("http://localhost:3000/invitations/accept?token=valid123")).toBe(true);
     });
 
     it("rejects untrusted origin that does not match configured application URL", () => {
-      expect(validateInvitationUrl("https://evil-phishing-site.com/invitations/accept?token=12345", "https://bizflow.ai")).toBe(false);
-      const inspection = inspectInvitationUrl("https://evil-phishing-site.com/invitations/accept?token=12345", "https://bizflow.ai");
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("https://evil-phishing-site.com/invitations/accept?token=12345")).toBe(false);
+      const inspection = inspectInvitationUrl("https://evil-phishing-site.com/invitations/accept?token=12345");
       expect(inspection.valid).toBe(false);
       expect(inspection.errorCode).toBe("PREFLIGHT_URL_UNTRUSTED_ORIGIN");
     });
 
     it("rejects invitation URL with wrong path", () => {
-      expect(validateInvitationUrl("https://bizflow.ai/some/other/path?token=12345", "https://bizflow.ai")).toBe(false);
-      const inspection = inspectInvitationUrl("https://bizflow.ai/some/other/path?token=12345", "https://bizflow.ai");
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("https://biz-flow-ai-one.vercel.app/some/other/path?token=12345")).toBe(false);
+      const inspection = inspectInvitationUrl("https://biz-flow-ai-one.vercel.app/some/other/path?token=12345");
       expect(inspection.valid).toBe(false);
       expect(inspection.errorCode).toBe("PREFLIGHT_URL_INVALID_PATHNAME");
     });
 
     it("rejects invitation URL without token parameter or with empty token", () => {
-      expect(validateInvitationUrl("https://bizflow.ai/invitations/accept", "https://bizflow.ai")).toBe(false);
-      expect(validateInvitationUrl("https://bizflow.ai/invitations/accept?token=", "https://bizflow.ai")).toBe(false);
-      const inspection = inspectInvitationUrl("https://bizflow.ai/invitations/accept", "https://bizflow.ai");
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept")).toBe(false);
+      expect(validateInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept?token=")).toBe(false);
+      const inspection = inspectInvitationUrl("https://biz-flow-ai-one.vercel.app/invitations/accept");
       expect(inspection.valid).toBe(false);
       expect(inspection.errorCode).toBe("PREFLIGHT_URL_MISSING_TOKEN");
     });
 
     it("rejects missing protocol on invitation URL", () => {
-      expect(validateInvitationUrl("bizflow.ai/invitations/accept?token=12345", "https://bizflow.ai")).toBe(false);
-      const inspection = inspectInvitationUrl("bizflow.ai/invitations/accept?token=12345", "https://bizflow.ai");
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("biz-flow-ai-one.vercel.app/invitations/accept?token=12345")).toBe(false);
+      const inspection = inspectInvitationUrl("biz-flow-ai-one.vercel.app/invitations/accept?token=12345");
       expect(inspection.valid).toBe(false);
       expect(inspection.errorCode).toBe("PREFLIGHT_URL_MALFORMED");
     });
 
     it("rejects invalid invitation URL", () => {
-      expect(validateInvitationUrl("not-a-valid-url", "https://bizflow.ai")).toBe(false);
-      const inspection = inspectInvitationUrl("not-a-valid-url", "https://bizflow.ai");
+      process.env.NEXT_PUBLIC_APP_URL = "https://biz-flow-ai-one.vercel.app";
+      (process.env as any).NODE_ENV = "production";
+
+      expect(validateInvitationUrl("not-a-valid-url")).toBe(false);
+      const inspection = inspectInvitationUrl("not-a-valid-url");
       expect(inspection.valid).toBe(false);
       expect(inspection.errorCode).toBe("PREFLIGHT_URL_MALFORMED");
     });
 
     it("rejects invalid configured application URL", () => {
-      expect(validateInvitationUrl("https://bizflow.ai/invitations/accept?token=valid123", "not-a-valid-app-url ://")).toBe(false);
-      const inspection = inspectInvitationUrl("https://bizflow.ai/invitations/accept?token=valid123", "not-a-valid-app-url ://");
+      (process.env as any).NODE_ENV = "development";
+      expect(validateInvitationUrl("http://localhost:3000/invitations/accept?token=valid123", "not-a-valid-app-url ://")).toBe(false);
+      const inspection = inspectInvitationUrl("http://localhost:3000/invitations/accept?token=valid123", "not-a-valid-app-url ://");
       expect(inspection.valid).toBe(false);
       expect(inspection.errorCode).toBe("PREFLIGHT_APP_BASE_URL_INVALID");
     });

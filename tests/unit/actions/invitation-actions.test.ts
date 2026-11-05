@@ -297,4 +297,91 @@ describe("Invitation Server Actions Email Delivery Warning Tests", () => {
       process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // 12. Failure handling when production URL configuration is invalid
+  // ---------------------------------------------------------------------------
+  it("inviteEmployeeAction safely returns EMAIL_DELIVERY_FAILED warning when NEXT_PUBLIC_APP_URL is missing in production", async () => {
+    const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const originalNodeEnv = process.env.NODE_ENV;
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    (process.env as any).NODE_ENV = "production";
+
+    try {
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: {
+          invitation_id: mockInvId,
+          organization_id: mockOrgId,
+          email: "newemployee@example.com",
+          role: "cashier",
+          status: "pending",
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        },
+        error: null,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: mockRpc,
+      } as any);
+
+      const result = await inviteEmployeeAction(mockSlug, {
+        organizationId: mockOrgId,
+        email: "newemployee@example.com",
+        role: "cashier",
+      });
+
+      // Invitation is created in database, but delivery returns structured warning
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.invitationId).toBe(mockInvId);
+        expect(result.data.status).toBe("pending");
+        expect(result.data.warning).toBe("EMAIL_DELIVERY_FAILED");
+      }
+      expect(mailer.sendInvitationEmail).not.toHaveBeenCalled();
+    } finally {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+      (process.env as any).NODE_ENV = originalNodeEnv;
+    }
+  });
+
+  it("resendInvitationAction safely returns EMAIL_DELIVERY_FAILED warning when NEXT_PUBLIC_APP_URL uses insecure HTTP in production", async () => {
+    const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NEXT_PUBLIC_APP_URL = "http://insecure.bizflow.ai";
+    (process.env as any).NODE_ENV = "production";
+
+    try {
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: {
+          invitation_id: mockInvId,
+          organization_id: mockOrgId,
+          email: "existing@example.com",
+          role: "manager",
+          status: "pending",
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        },
+        error: null,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: mockRpc,
+      } as any);
+
+      const result = await resendInvitationAction(mockSlug, {
+        invitationId: mockInvId,
+      });
+
+      // Invitation record updated in DB, but email delivery returns structured warning
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.invitationId).toBe(mockInvId);
+        expect(result.data.status).toBe("pending");
+        expect(result.data.warning).toBe("EMAIL_DELIVERY_FAILED");
+      }
+      expect(mailer.sendInvitationEmail).not.toHaveBeenCalled();
+    } finally {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+      (process.env as any).NODE_ENV = originalNodeEnv;
+    }
+  });
 });
