@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getEnv, validateRecoveryGrantSecret, validateMailerConfig } from "@/lib/env";
+import { getEnv, validateRecoveryGrantSecret, validateMailerConfig, getSafeMailerConfig } from "@/lib/env";
 
 describe("Environment Variable Validation", () => {
   const originalEnv = process.env;
@@ -133,6 +133,64 @@ describe("Environment Variable Validation", () => {
           nodeEnv: "production",
         })
       ).toThrow("EMAIL_FROM");
+    });
+  });
+
+  describe("getSafeMailerConfig", () => {
+    it("returns success with apiKey and emailFrom when configuration is valid", () => {
+      const result = getSafeMailerConfig({
+        apiKey: "re_test_key_123",
+        emailFrom: "BizFlow AI <noreply@bizflow.ai>",
+        nodeEnv: "production",
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.apiKey).toBe("re_test_key_123");
+        expect(result.emailFrom).toBe("BizFlow AI <noreply@bizflow.ai>");
+      }
+    });
+
+    it("returns structured failure when RESEND_API_KEY is missing", () => {
+      const result = getSafeMailerConfig({
+        apiKey: undefined,
+        emailFrom: "noreply@bizflow.ai",
+        nodeEnv: "production",
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.errorCode).toBe("PREFLIGHT_MISSING_RESEND_API_KEY");
+        expect(result.error).toMatch(/Missing RESEND_API_KEY in production/i);
+      }
+    });
+
+    it("returns structured failure when EMAIL_FROM is missing", () => {
+      const result = getSafeMailerConfig({
+        apiKey: "re_test_key_123",
+        emailFrom: undefined,
+        nodeEnv: "production",
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.errorCode).toBe("PREFLIGHT_MISSING_EMAIL_FROM");
+        expect(result.error).toMatch(/Missing EMAIL_FROM in production/i);
+      }
+    });
+
+    it("returns structured failure when EMAIL_FROM format is invalid", () => {
+      const result = getSafeMailerConfig({
+        apiKey: "re_test_key_123",
+        emailFrom: "invalid-email-address",
+        nodeEnv: "production",
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.errorCode).toBe("PREFLIGHT_INVALID_EMAIL_FROM");
+        expect(result.error).toMatch(/Invalid EMAIL_FROM/i);
+      }
     });
   });
 });

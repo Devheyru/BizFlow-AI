@@ -93,6 +93,56 @@ export function validateMailerConfig(envOverrides?: {
   };
 }
 
+export type SafeMailerConfigResult =
+  | { success: true; apiKey: string; emailFrom: string }
+  | { success: false; error: string; errorCode: string };
+
+/**
+ * Validates mailer configuration at dispatch time without throwing.
+ * Returns structured result with diagnostic errorCode for safe logging and partial warning handling.
+ */
+export function getSafeMailerConfig(envOverrides?: {
+  apiKey?: string;
+  emailFrom?: string;
+  nodeEnv?: string;
+}): SafeMailerConfigResult {
+  const nodeEnv = envOverrides?.nodeEnv ?? process.env.NODE_ENV;
+  const rawApiKey = (envOverrides?.apiKey ?? process.env.RESEND_API_KEY)?.trim();
+  const rawEmailFrom = (envOverrides?.emailFrom ?? process.env.EMAIL_FROM)?.trim();
+  const isProduction = nodeEnv === "production";
+
+  if (!rawApiKey) {
+    return {
+      success: false,
+      error: isProduction ? "Missing RESEND_API_KEY in production" : "RESEND_API_KEY is not configured",
+      errorCode: "PREFLIGHT_MISSING_RESEND_API_KEY",
+    };
+  }
+
+  if (!rawEmailFrom) {
+    return {
+      success: false,
+      error: isProduction ? "Missing EMAIL_FROM in production" : "EMAIL_FROM is not configured",
+      errorCode: "PREFLIGHT_MISSING_EMAIL_FROM",
+    };
+  }
+
+  const emailFromRes = emailFromSchema.safeParse(rawEmailFrom);
+  if (!emailFromRes.success) {
+    return {
+      success: false,
+      error: "Invalid EMAIL_FROM configuration: must be a valid email or 'Display Name <email@domain.com>'",
+      errorCode: "PREFLIGHT_INVALID_EMAIL_FROM",
+    };
+  }
+
+  return {
+    success: true,
+    apiKey: rawApiKey,
+    emailFrom: emailFromRes.data,
+  };
+}
+
 /**
  * Validates and returns the dedicated server-only secret for password recovery HMAC signing.
  * Fails securely if the secret is missing or less than 32 characters (256 bits).
