@@ -83,6 +83,11 @@ export async function getPendingInvitationCookie(): Promise<string | null> {
     if (isValidInvitationTokenFormat(trimmed)) {
       return trimmed;
     }
+    try {
+      cookieStore.delete(INVITATION_COOKIE_NAME);
+    } catch {
+      // Delete may be disallowed in read-only render phases
+    }
     return null;
   } catch {
     return null;

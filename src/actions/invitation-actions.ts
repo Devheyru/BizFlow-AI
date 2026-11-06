@@ -80,6 +80,10 @@ export interface DeclineInvitationResult {
   status: "declined";
 }
 
+export interface DismissInvitationResult {
+  redirectUrl: string;
+}
+
 const KNOWN_ERROR_MESSAGES: Record<string, string> = {
   P0001: "Email verification is required.",
   P0003: "Authentication required.",
@@ -460,6 +464,7 @@ export async function validateInvitationTokenAction(
   try {
     const parsed = validateInvitationTokenSchema.safeParse(input);
     if (!parsed.success) {
+      await clearPendingInvitationCookie();
       return {
         success: true,
         data: { isValid: false, isExpired: false, status: null },
@@ -682,5 +687,36 @@ export async function declineInvitationAction(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "An unexpected error occurred.";
     return { success: false, error: { code: "INTERNAL_ERROR", message } };
+  }
+}
+
+/**
+ * Dismisses the active invitation context from the current session (FR-019).
+ *
+ * Requirements:
+ * - Executes through a server action.
+ * - Clears the HTTP-only pending invitation cookie.
+ * - Never accepts, declines, revokes, or otherwise modifies the original invitation database record.
+ * - Redirects the current user to /onboarding/create-organization.
+ * - Avoids revealing the invited employee's email address.
+ * - The intended invitation remains usable by its intended recipient.
+ */
+export async function dismissInvitationAction(): Promise<ActionResult<DismissInvitationResult>> {
+  try {
+    await clearPendingInvitationCookie();
+    return {
+      success: true,
+      data: {
+        redirectUrl: "/onboarding/create-organization",
+      },
+    };
+  } catch {
+    return {
+      success: false,
+      error: {
+        code: "DISMISS_FAILED",
+        message: "Failed to dismiss invitation.",
+      },
+    };
   }
 }

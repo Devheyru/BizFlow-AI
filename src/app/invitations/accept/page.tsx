@@ -2,7 +2,11 @@ import React from "react";
 import { createClient } from "@/lib/supabase/server";
 import { validateInvitationTokenAction } from "@/actions/invitation-actions";
 import { AcceptInvitationCard } from "@/components/invitations/AcceptInvitationCard";
-import { getPendingInvitationCookie, isValidInvitationTokenFormat } from "@/lib/auth/invitation-cookie";
+import {
+  getPendingInvitationCookie,
+  isValidInvitationTokenFormat,
+  clearPendingInvitationCookie,
+} from "@/lib/auth/invitation-cookie";
 
 interface InvitationAcceptancePageProps {
   searchParams: Promise<{ token?: string }>;
@@ -40,6 +44,8 @@ export default async function InvitationAcceptancePage({
       isExpired = valRes.data.isExpired;
       tokenStatus = valRes.data.status;
     }
+  } else {
+    await clearPendingInvitationCookie();
   }
 
   // Check if a user is currently signed in

@@ -1,15 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { signUpAction, signInAction } from "@/actions/auth-actions";
 import {
   acceptInvitationAction,
   resendInvitationAction,
   validateInvitationTokenAction,
+  dismissInvitationAction,
 } from "@/actions/invitation-actions";
 import { GET as authCallbackGet } from "@/app/api/auth/callback/route";
 import * as supabaseServer from "@/lib/supabase/server";
+import * as supabaseMiddleware from "@/lib/supabase/middleware";
 import * as authContext from "@/lib/auth/context";
 import * as mailer from "@/lib/email/invitation-mailer";
+import { middleware } from "@/middleware";
+import InvitationAcceptancePage from "@/app/invitations/accept/page";
 import {
   INVITATION_COOKIE_NAME,
   setPendingInvitationCookie,
@@ -19,6 +23,11 @@ import {
   extractInvitationToken,
 } from "@/lib/auth/invitation-cookie";
 import { sanitizeRedirectUrl } from "@/lib/auth/redirect";
+
+// Mock supabase middleware
+vi.mock("@/lib/supabase/middleware", () => ({
+  updateSession: vi.fn(),
+}));
 
 // Mock auth context
 vi.mock("@/lib/auth/context", () => ({
@@ -703,5 +712,289 @@ describe("Feature 002: Invitation-Aware Registration & Authentication Flow Tests
 
     await clearPendingInvitationCookie();
     expect(await getPendingInvitationCookie()).toBeNull();
+  });
+
+  // ===========================================================================
+  // Part 4: Invalid Token Handling & Cookie Invariants
+  // ===========================================================================
+
+  describe("Invalid Token Handling & Cookie Cleanup", () => {
+    it("RPC error clears the pending invitation cookie", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: "Database connection failed", code: "PGRST000" },
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({ rpc: mockRpc } as any);
+
+      const res = await validateInvitationTokenAction({ token: validToken });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.isValid).toBe(false);
+      }
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("RPC returning no data clears the pending invitation cookie", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: null,
+        error: null,
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({ rpc: mockRpc } as any);
+
+      const res = await validateInvitationTokenAction({ token: validToken });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.isValid).toBe(false);
+      }
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("RPC returning is_valid === false clears the pending invitation cookie", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: { is_valid: false, is_expired: false, status: null },
+        error: null,
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({ rpc: mockRpc } as any);
+
+      const res = await validateInvitationTokenAction({ token: validToken });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.isValid).toBe(false);
+      }
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("Malformed URL token clears the cookie in validateInvitationTokenAction", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const res = await validateInvitationTokenAction({ token: "not-a-valid-64-char-hex-token" });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.isValid).toBe(false);
+      }
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("On invitation acceptance page, malformed token immediately clears the cookie", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+        },
+      } as any);
+
+      await InvitationAcceptancePage({
+        searchParams: Promise.resolve({ token: "invalid-token" }),
+      });
+
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("Expired invitation clears the pending invitation cookie", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: { is_valid: false, is_expired: true, status: "expired" },
+        error: null,
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({ rpc: mockRpc } as any);
+
+      const res = await validateInvitationTokenAction({ token: validToken });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.isExpired).toBe(true);
+        expect(res.data.status).toBe("expired");
+      }
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("Revoked invitation clears the pending invitation cookie", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: { is_valid: false, is_expired: false, status: "revoked" },
+        error: null,
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({ rpc: mockRpc } as any);
+
+      const res = await validateInvitationTokenAction({ token: validToken });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.status).toBe("revoked");
+      }
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("Accepted or declined invitation clears the pending invitation cookie", async () => {
+      // Accepted
+      await setPendingInvitationCookie(validToken);
+      const mockRpcAccepted = vi.fn().mockResolvedValue({
+        data: { is_valid: false, is_expired: false, status: "accepted" },
+        error: null,
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValueOnce({ rpc: mockRpcAccepted } as any);
+      await validateInvitationTokenAction({ token: validToken });
+      expect(await getPendingInvitationCookie()).toBeNull();
+
+      // Declined
+      await setPendingInvitationCookie(validToken);
+      const mockRpcDeclined = vi.fn().mockResolvedValue({
+        data: { is_valid: false, is_expired: false, status: "declined" },
+        error: null,
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValueOnce({ rpc: mockRpcDeclined } as any);
+      await validateInvitationTokenAction({ token: validToken });
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("A valid pending invitation retains the pending invitation cookie", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: { is_valid: true, is_expired: false, status: "pending" },
+        error: null,
+      });
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({ rpc: mockRpc } as any);
+
+      const res = await validateInvitationTokenAction({ token: validToken });
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.isValid).toBe(true);
+        expect(res.data.status).toBe("pending");
+      }
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+    });
+  });
+
+  // ===========================================================================
+  // Part 5: Invitation Dismissal
+  // ===========================================================================
+
+  describe("Invitation Dismissal Action", () => {
+    it("Dismissal clears the pending invitation cookie and redirects to onboarding", async () => {
+      await setPendingInvitationCookie(validToken);
+      expect(await getPendingInvitationCookie()).toBe(validToken);
+
+      const res = await dismissInvitationAction();
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.redirectUrl).toBe("/onboarding/create-organization");
+      }
+      expect(await getPendingInvitationCookie()).toBeNull();
+    });
+
+    it("Dismissal does not modify, accept, decline, or revoke original invitation in DB", async () => {
+      const mockRpc = vi.fn();
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({ rpc: mockRpc } as any);
+
+      await dismissInvitationAction();
+
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it("Dismissal action does not disclose invitation email or recipient details", async () => {
+      const res = await dismissInvitationAction();
+      expect(res.success).toBe(true);
+      const json = JSON.stringify(res);
+      expect(json).not.toContain("@");
+      expect(json).not.toContain("email");
+    });
+  });
+
+  // ===========================================================================
+  // Part 6: Middleware Tests
+  // ===========================================================================
+
+  describe("Middleware Routing & Redirect Invariants", () => {
+    it("/invitations/accept?token=... captures a valid token in the HTTP-only cookie", async () => {
+      vi.mocked(supabaseMiddleware.updateSession).mockResolvedValue({
+        supabaseResponse: NextResponse.next(),
+        user: null,
+      } as any);
+
+      const req = new NextRequest(`http://localhost:3000/invitations/accept?token=${validToken}`);
+      const res = await middleware(req);
+
+      const cookie = res.cookies.get(INVITATION_COOKIE_NAME);
+      expect(cookie).toBeDefined();
+      expect(cookie?.value).toBe(validToken);
+      expect(cookie?.httpOnly).toBe(true);
+      expect(cookie?.sameSite).toBe("lax");
+    });
+
+    it("Authenticated users visiting /sign-in?next=... retain the sanitized destination", async () => {
+      vi.mocked(supabaseMiddleware.updateSession).mockResolvedValue({
+        supabaseResponse: NextResponse.next(),
+        user: { id: "u-auth", email_confirmed_at: "2026-11-01T00:00:00Z" },
+      } as any);
+
+      const req = new NextRequest("http://localhost:3000/sign-in?next=/settings/profile");
+      const res = await middleware(req);
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toBe("http://localhost:3000/settings/profile");
+    });
+
+    it("Authenticated users visiting /sign-up?next=... retain the sanitized destination", async () => {
+      vi.mocked(supabaseMiddleware.updateSession).mockResolvedValue({
+        supabaseResponse: NextResponse.next(),
+        user: { id: "u-auth", email_confirmed_at: "2026-11-01T00:00:00Z" },
+      } as any);
+
+      const targetPath = `/invitations/accept?token=${validToken}`;
+      const req = new NextRequest(`http://localhost:3000/sign-up?next=${encodeURIComponent(targetPath)}`);
+      const res = await middleware(req);
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toBe(`http://localhost:3000${targetPath}`);
+    });
+
+    it("Unsafe external redirect destinations fall back to /", async () => {
+      vi.mocked(supabaseMiddleware.updateSession).mockResolvedValue({
+        supabaseResponse: NextResponse.next(),
+        user: { id: "u-auth", email_confirmed_at: "2026-11-01T00:00:00Z" },
+      } as any);
+
+      // Full external URL
+      const req1 = new NextRequest("http://localhost:3000/sign-in?next=https://evil.com/phish");
+      const res1 = await middleware(req1);
+      expect(res1.headers.get("location")).toBe("http://localhost:3000/");
+
+      // Protocol-relative URL
+      const req2 = new NextRequest("http://localhost:3000/sign-in?next=//evil.com/phish");
+      const res2 = await middleware(req2);
+      expect(res2.headers.get("location")).toBe("http://localhost:3000/");
+
+      // Backslash evasion URL
+      const req3 = new NextRequest("http://localhost:3000/sign-in?next=/\\evil.com");
+      const res3 = await middleware(req3);
+      expect(res3.headers.get("location")).toBe("http://localhost:3000/");
+    });
+
+    it("Missing next parameter falls back to /", async () => {
+      vi.mocked(supabaseMiddleware.updateSession).mockResolvedValue({
+        supabaseResponse: NextResponse.next(),
+        user: { id: "u-auth", email_confirmed_at: "2026-11-01T00:00:00Z" },
+      } as any);
+
+      const req = new NextRequest("http://localhost:3000/sign-in");
+      const res = await middleware(req);
+      expect(res.headers.get("location")).toBe("http://localhost:3000/");
+    });
   });
 });
