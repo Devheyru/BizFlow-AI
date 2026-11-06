@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   acceptInvitationAction,
   declineInvitationAction,
+  dismissInvitationAction,
 } from "@/actions/invitation-actions";
 import {
   Mail,
@@ -218,6 +219,21 @@ export function AcceptInvitationCard({
     setIsDeclined(true);
   }
 
+  async function handleDismiss() {
+    setLoading(true);
+    setErrorMessage(null);
+
+    const res = await dismissInvitationAction();
+    setLoading(false);
+
+    if (!res.success) {
+      setErrorMessage(res.error.message);
+      return;
+    }
+
+    router.push(res.data.redirectUrl);
+  }
+
   return (
     <div className="w-full max-w-md rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-md p-6 sm:p-8 space-y-6">
       <div className="text-center space-y-2">
@@ -244,14 +260,25 @@ export function AcceptInvitationCard({
               </p>
             </div>
           </div>
-          <Link
-            href={`/sign-in?next=${encodeURIComponent(`/invitations/accept?token=${token}`)}`}
-            className="block"
-          >
-            <Button variant="outline" size="sm" className="w-full text-xs">
-              Switch Account
+          <div className="flex flex-col gap-2 pt-1">
+            <Link
+              href={`/sign-in?next=${encodeURIComponent(`/invitations/accept?token=${token}`)}`}
+              className="block"
+            >
+              <Button variant="outline" size="sm" className="w-full text-xs">
+                Switch Account
+              </Button>
+            </Link>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDismiss}
+              disabled={loading}
+              className="w-full text-xs"
+            >
+              Dismiss Invitation and Set Up My Store
             </Button>
-          </Link>
+          </div>
         </div>
       )}
 
