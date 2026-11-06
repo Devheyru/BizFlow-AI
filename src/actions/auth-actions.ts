@@ -27,6 +27,11 @@ import {
   consumeRecoveryGrant,
   clearRecoveryGrant,
 } from "@/lib/auth/recovery";
+import {
+  setPendingInvitationCookie,
+  getPendingInvitationCookie,
+  isValidInvitationTokenFormat,
+} from "@/lib/auth/invitation-cookie";
 
 /**
  * Register a new user with password complexity and anti-enumeration safeguards (FR-001, FR-002).
@@ -56,9 +61,18 @@ export async function signUpAction(
   const supabase = await createClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+  // Resolve and preserve invitation context
+  const effectiveToken = isValidInvitationTokenFormat(input.invitationToken)
+    ? input.invitationToken.trim()
+    : await getPendingInvitationCookie();
+
+  if (effectiveToken && isValidInvitationTokenFormat(effectiveToken)) {
+    await setPendingInvitationCookie(effectiveToken);
+  }
+
   // Build callback target
-  const nextTarget = input.invitationToken
-    ? `/invitations/accept?token=${encodeURIComponent(input.invitationToken)}`
+  const nextTarget = effectiveToken
+    ? `/invitations/accept?token=${encodeURIComponent(effectiveToken)}`
     : "/";
   const emailRedirectTo = `${appUrl}/api/auth/callback?next=${encodeURIComponent(nextTarget)}`;
 
@@ -229,9 +243,15 @@ export async function signInAction(
 
   // If user successfully confirmed to have 0 active memberships, guide to onboarding or target redirect (e.g. pending invitation)
   if (!memberships || memberships.length === 0) {
-    const targetUrl = redirectTo
-      ? sanitizeRedirectUrl(redirectTo, "/onboarding/create-organization")
-      : "/onboarding/create-organization";
+    let targetUrl: string;
+    if (redirectTo) {
+      targetUrl = sanitizeRedirectUrl(redirectTo, "/onboarding/create-organization");
+    } else {
+      const cookieToken = await getPendingInvitationCookie();
+      targetUrl = cookieToken
+        ? `/invitations/accept?token=${encodeURIComponent(cookieToken)}`
+        : "/onboarding/create-organization";
+    }
 
     return {
       success: true,

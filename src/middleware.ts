@@ -8,6 +8,7 @@ const PUBLIC_AUTH_ROUTES = [
   "/verify-email",
   "/forgot-password",
   "/reset-password",
+  "/invitations/accept",
 ];
 
 const API_AUTH_ROUTES = ["/api/auth/callback"];
@@ -37,6 +38,20 @@ export async function middleware(request: NextRequest) {
   // Allow API auth callbacks unconditionally
   if (isApiAuthRoute) {
     return supabaseResponse;
+  }
+
+  // Preserve invitation token in a secure HTTP-only cookie for registration & callback continuity
+  if (pathname.startsWith("/invitations/accept")) {
+    const token = request.nextUrl.searchParams.get("token");
+    if (token && /^[a-f0-9]{64}$/.test(token)) {
+      supabaseResponse.cookies.set("bizflow_invitation_token", token, {
+        path: "/",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 2, // 2 hours
+      });
+    }
   }
 
   // 2. Unauthenticated Visitor Handling
@@ -69,9 +84,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/verify-email", request.url));
   }
 
-  // If authenticated and verified user accesses /sign-in or /sign-up, redirect to root
+  // If authenticated and verified user accesses /sign-in or /sign-up, redirect to safe next target or root
   if (isEmailVerified && (pathname === "/sign-in" || pathname === "/sign-up")) {
-    return NextResponse.redirect(new URL("/", request.url));
+    const nextParam = request.nextUrl.searchParams.get("next");
+    const safeNext = sanitizeRedirectUrl(nextParam, "/");
+    return NextResponse.redirect(new URL(safeNext, request.url));
   }
 
   // Allow request to proceed to server components where getTenantContext()

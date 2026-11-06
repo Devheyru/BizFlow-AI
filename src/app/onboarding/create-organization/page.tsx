@@ -1,6 +1,8 @@
 import React from "react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { requireVerifiedUser } from "@/lib/auth/guards";
+import { getPendingInvitationCookie } from "@/lib/auth/invitation-cookie";
 import { CreateOrganizationForm } from "@/components/organization/CreateOrganizationForm";
 import { Building2 } from "lucide-react";
 
@@ -12,6 +14,12 @@ export const metadata: Metadata = {
 export default async function CreateOrganizationPage() {
   // Enforce authentication and email verification server-side
   await requireVerifiedUser();
+
+  // If user was invited to an organization, guide them to accept invitation instead
+  const pendingToken = await getPendingInvitationCookie();
+  if (pendingToken) {
+    redirect(`/invitations/accept?token=${encodeURIComponent(pendingToken)}`);
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">

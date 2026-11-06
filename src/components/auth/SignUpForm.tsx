@@ -96,7 +96,14 @@ export function SignUpForm({ invitationToken }: { invitationToken?: string }) {
           </Alert>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <Link href="/sign-in" className="text-sm font-medium text-blue-600 hover:underline">
+          <Link
+            href={
+              invitationToken
+                ? `/sign-in?next=${encodeURIComponent(`/invitations/accept?token=${invitationToken}`)}`
+                : "/sign-in"
+            }
+            className="text-sm font-medium text-blue-600 hover:underline"
+          >
             Proceed to Sign In &rarr;
           </Link>
         </CardFooter>
@@ -113,6 +120,13 @@ export function SignUpForm({ invitationToken }: { invitationToken?: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {invitationToken && (
+          <div className="rounded-md bg-blue-50 dark:bg-blue-950/40 p-3 text-xs text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900 flex items-center gap-2 mb-4">
+            <span className="font-semibold">Joining via invitation:</span>
+            <span>Your account will be linked to your team workspace upon email verification.</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           {serverError && (
             <Alert variant="destructive">
@@ -242,7 +256,14 @@ export function SignUpForm({ invitationToken }: { invitationToken?: string }) {
       </CardContent>
       <CardFooter className="flex justify-center border-t border-gray-100 dark:border-gray-800 pt-4 text-xs text-gray-500">
         Already have an account?&nbsp;
-        <Link href="/sign-in" className="font-semibold text-blue-600 hover:underline">
+        <Link
+          href={
+            invitationToken
+              ? `/sign-in?next=${encodeURIComponent(`/invitations/accept?token=${invitationToken}`)}`
+              : "/sign-in"
+          }
+          className="font-semibold text-blue-600 hover:underline"
+        >
           Sign In
         </Link>
       </CardFooter>

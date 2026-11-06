@@ -143,7 +143,10 @@ export function SignInForm() {
       </CardContent>
       <CardFooter className="flex justify-center border-t border-gray-100 dark:border-gray-800 pt-4 text-xs text-gray-500">
         Don&apos;t have an account?&nbsp;
-        <Link href="/sign-up" className="font-semibold text-blue-600 hover:underline">
+        <Link
+          href={nextParam ? `/sign-up?next=${encodeURIComponent(nextParam)}` : "/sign-up"}
+          className="font-semibold text-blue-600 hover:underline"
+        >
           Create Account
         </Link>
       </CardFooter>
