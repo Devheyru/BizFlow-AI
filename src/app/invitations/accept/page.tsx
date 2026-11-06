@@ -2,6 +2,7 @@ import React from "react";
 import { createClient } from "@/lib/supabase/server";
 import { validateInvitationTokenAction } from "@/actions/invitation-actions";
 import { AcceptInvitationCard } from "@/components/invitations/AcceptInvitationCard";
+import { getPendingInvitationCookie, isValidInvitationTokenFormat } from "@/lib/auth/invitation-cookie";
 
 interface InvitationAcceptancePageProps {
   searchParams: Promise<{ token?: string }>;
@@ -20,12 +21,20 @@ export default async function InvitationAcceptancePage({
 }: InvitationAcceptancePageProps) {
   const { token } = await searchParams;
 
+  let rawToken = typeof token === "string" ? token.trim() : "";
+  if (!rawToken) {
+    const cookieToken = await getPendingInvitationCookie();
+    if (cookieToken) {
+      rawToken = cookieToken;
+    }
+  }
+
   let isValidToken = false;
   let isExpired = false;
   let tokenStatus: string | null = null;
 
-  if (typeof token === "string" && token.length >= 32) {
-    const valRes = await validateInvitationTokenAction({ token });
+  if (isValidInvitationTokenFormat(rawToken)) {
+    const valRes = await validateInvitationTokenAction({ token: rawToken });
     if (valRes.success) {
       isValidToken = valRes.data.isValid;
       isExpired = valRes.data.isExpired;
@@ -51,7 +60,7 @@ export default async function InvitationAcceptancePage({
       </div>
 
       <AcceptInvitationCard
-        token={typeof token === "string" ? token : ""}
+        token={rawToken}
         currentUserEmail={user?.email || null}
         isValidToken={isValidToken}
         isExpired={isExpired}

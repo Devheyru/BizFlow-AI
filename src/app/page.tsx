@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Building2, ShieldCheck, ArrowRight, Store, Zap } from "lucide-react";
 import { createClient, getSafeCookieStore } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
+import { getPendingInvitationCookie } from "@/lib/auth/invitation-cookie";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -25,6 +26,10 @@ export default async function HomePage() {
       .order("created_at", { ascending: true });
 
     if (memError || !memberships || memberships.length === 0) {
+      const pendingToken = await getPendingInvitationCookie();
+      if (pendingToken) {
+        redirect(`/invitations/accept?token=${encodeURIComponent(pendingToken)}`);
+      }
       redirect("/onboarding/create-organization");
     }
 
@@ -49,6 +54,10 @@ export default async function HomePage() {
 
     const fallbackOrg = activeOrgs[0];
     if (!fallbackOrg || activeOrgs.length === 0) {
+      const pendingToken = await getPendingInvitationCookie();
+      if (pendingToken) {
+        redirect(`/invitations/accept?token=${encodeURIComponent(pendingToken)}`);
+      }
       redirect("/onboarding/create-organization");
     }
 

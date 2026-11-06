@@ -7,6 +7,11 @@ import {
   getSessionIdFromToken,
   setRecoveryGrantCookie,
 } from "@/lib/auth/recovery";
+import {
+  INVITATION_COOKIE_NAME,
+  getPendingInvitationCookie,
+  isValidInvitationTokenFormat,
+} from "@/lib/auth/invitation-cookie";
 
 export const runtime = "nodejs";
 
@@ -15,7 +20,16 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const next = requestUrl.searchParams.get("next");
   const errorParam = requestUrl.searchParams.get("error");
-  const safeRedirect = sanitizeRedirectUrl(next);
+  let safeRedirect = sanitizeRedirectUrl(next);
+
+  // If next target was omitted or defaulted to root, check for pending invitation context
+  if (safeRedirect === "/") {
+    const cookieToken =
+      request.cookies.get(INVITATION_COOKIE_NAME)?.value || (await getPendingInvitationCookie());
+    if (cookieToken && isValidInvitationTokenFormat(cookieToken)) {
+      safeRedirect = `/invitations/accept?token=${encodeURIComponent(cookieToken.trim())}`;
+    }
+  }
 
   // If GoTrue returned an error query parameter (e.g. otp_expired, link already used)
   if (errorParam) {

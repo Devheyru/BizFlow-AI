@@ -5,6 +5,7 @@ import { createClient, getSafeCookieStore } from "@/lib/supabase/server";
 import { resolveTenantContext } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/auth/permissions";
 import { sendInvitationEmail, buildInvitationUrl } from "@/lib/email/invitation-mailer";
+import { clearPendingInvitationCookie } from "@/lib/auth/invitation-cookie";
 import {
   inviteEmployeeSchema,
   resendInvitationSchema,
@@ -472,6 +473,7 @@ export async function validateInvitationTokenAction(
     });
 
     if (error || !data) {
+      await clearPendingInvitationCookie();
       return {
         success: true,
         data: { isValid: false, isExpired: false, status: null },
@@ -484,6 +486,17 @@ export async function validateInvitationTokenAction(
       status: InvitationStatus | null;
     };
 
+    if (
+      !payload.is_valid ||
+      payload.is_expired ||
+      payload.status === "expired" ||
+      payload.status === "accepted" ||
+      payload.status === "declined" ||
+      payload.status === "revoked"
+    ) {
+      await clearPendingInvitationCookie();
+    }
+
     return {
       success: true,
       data: {
@@ -493,6 +506,7 @@ export async function validateInvitationTokenAction(
       },
     };
   } catch {
+    await clearPendingInvitationCookie();
     return {
       success: true,
       data: { isValid: false, isExpired: false, status: null },
@@ -543,6 +557,15 @@ export async function acceptInvitationAction(
     };
 
     if (!res.success) {
+      if (
+        res.code === "INVITATION_EXPIRED" ||
+        res.code === "INVITATION_NOT_PENDING" ||
+        res.code === "INVITATION_NOT_FOUND" ||
+        res.code === "ALREADY_ACTIVE_MEMBER"
+      ) {
+        await clearPendingInvitationCookie();
+      }
+
       // Generic privacy message for email mismatch without leaking addresses
       const message =
         res.code === "EMAIL_MISMATCH"
@@ -554,6 +577,9 @@ export async function acceptInvitationAction(
         error: { code: res.code || "ACCEPT_FAILED", message },
       };
     }
+
+    // Clear pending invitation cookie now that acceptance has succeeded
+    await clearPendingInvitationCookie();
 
     // Set active organization cookie preference
     if (res.organization_slug) {
@@ -624,6 +650,14 @@ export async function declineInvitationAction(
     };
 
     if (!res.success) {
+      if (
+        res.code === "INVITATION_EXPIRED" ||
+        res.code === "INVITATION_NOT_PENDING" ||
+        res.code === "INVITATION_NOT_FOUND"
+      ) {
+        await clearPendingInvitationCookie();
+      }
+
       const message =
         res.code === "EMAIL_MISMATCH"
           ? "The authenticated account does not match the invitation recipient."
@@ -634,6 +668,9 @@ export async function declineInvitationAction(
         error: { code: res.code || "DECLINE_FAILED", message },
       };
     }
+
+    // Clear pending invitation cookie upon decline
+    await clearPendingInvitationCookie();
 
     return {
       success: true,
