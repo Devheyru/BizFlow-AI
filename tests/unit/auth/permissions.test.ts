@@ -107,9 +107,10 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
   });
 
   describe("Rule 3: Automatic Owner Access for Registered Permissions", () => {
-    it("grants Owner access to all 7 registered system permissions dynamically", () => {
+    it("grants Owner access to all 16 registered system permissions dynamically", () => {
       const ownerCtx = createMockContext("owner");
 
+      expect(SYSTEM_PERMISSIONS).toHaveLength(16);
       for (const permission of SYSTEM_PERMISSIONS) {
         expect(hasPermission(ownerCtx, permission)).toBe(true);
       }
@@ -125,7 +126,7 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
   });
 
   describe("Rule 4: Deterministic Role-Permission Mappings for Non-Owners", () => {
-    it("grants Admin all 7 employee permissions", () => {
+    it("grants Admin all 16 system permissions", () => {
       const adminCtx = createMockContext("admin");
 
       for (const permission of SYSTEM_PERMISSIONS) {
@@ -133,9 +134,10 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
       }
     });
 
-    it("grants Manager only employees:read permission and denies mutation permissions", () => {
+    it("grants Manager operational permissions and denies archive/destructive permissions", () => {
       const managerCtx = createMockContext("manager");
 
+      // Feature 002: employees read only
       expect(hasPermission(managerCtx, "employees:read")).toBe(true);
       expect(hasPermission(managerCtx, "employees:invite")).toBe(false);
       expect(hasPermission(managerCtx, "employees:update_role")).toBe(false);
@@ -143,14 +145,63 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
       expect(hasPermission(managerCtx, "employees:remove")).toBe(false);
       expect(hasPermission(managerCtx, "employees:invitations_read")).toBe(false);
       expect(hasPermission(managerCtx, "employees:invitations_revoke")).toBe(false);
+
+      // Feature 003: products operational
+      expect(hasPermission(managerCtx, "products:read")).toBe(true);
+      expect(hasPermission(managerCtx, "products:read_cost")).toBe(true);
+      expect(hasPermission(managerCtx, "products:create")).toBe(true);
+      expect(hasPermission(managerCtx, "products:update")).toBe(true);
+      expect(hasPermission(managerCtx, "products:archive")).toBe(false);
+
+      // Feature 003: categories operational
+      expect(hasPermission(managerCtx, "categories:read")).toBe(true);
+      expect(hasPermission(managerCtx, "categories:create")).toBe(true);
+      expect(hasPermission(managerCtx, "categories:update")).toBe(true);
+      expect(hasPermission(managerCtx, "categories:archive")).toBe(false);
     });
 
-    it("denies Cashier all employee permissions", () => {
+    it("restricts Cashier to retail read-only permissions and denies cost/mutation permissions", () => {
       const cashierCtx = createMockContext("cashier");
 
-      for (const permission of SYSTEM_PERMISSIONS) {
-        expect(hasPermission(cashierCtx, permission)).toBe(false);
-      }
+      // Feature 002: strictly denied all 7 employee permissions
+      expect(hasPermission(cashierCtx, "employees:read")).toBe(false);
+      expect(hasPermission(cashierCtx, "employees:invite")).toBe(false);
+      expect(hasPermission(cashierCtx, "employees:update_role")).toBe(false);
+      expect(hasPermission(cashierCtx, "employees:suspend")).toBe(false);
+      expect(hasPermission(cashierCtx, "employees:remove")).toBe(false);
+      expect(hasPermission(cashierCtx, "employees:invitations_read")).toBe(false);
+      expect(hasPermission(cashierCtx, "employees:invitations_revoke")).toBe(false);
+
+      // Feature 003: read-only access without cost or mutation
+      expect(hasPermission(cashierCtx, "products:read")).toBe(true);
+      expect(hasPermission(cashierCtx, "categories:read")).toBe(true);
+      expect(hasPermission(cashierCtx, "products:read_cost")).toBe(false);
+      expect(hasPermission(cashierCtx, "products:create")).toBe(false);
+      expect(hasPermission(cashierCtx, "products:update")).toBe(false);
+      expect(hasPermission(cashierCtx, "products:archive")).toBe(false);
+      expect(hasPermission(cashierCtx, "categories:create")).toBe(false);
+      expect(hasPermission(cashierCtx, "categories:update")).toBe(false);
+      expect(hasPermission(cashierCtx, "categories:archive")).toBe(false);
+    });
+
+    it("evaluates against ROLE_PERMISSIONS static mapping when context.permissions is undefined", () => {
+      const managerNoPerms = createMockContext("manager");
+      // @ts-expect-error - simulating legacy/undefined context.permissions
+      delete managerNoPerms.permissions;
+
+      expect(hasPermission(managerNoPerms, "products:read")).toBe(true);
+      expect(hasPermission(managerNoPerms, "products:create")).toBe(true);
+      expect(hasPermission(managerNoPerms, "products:archive")).toBe(false);
+      expect(hasPermission(managerNoPerms, "employees:invite")).toBe(false);
+
+      const cashierNoPerms = createMockContext("cashier");
+      // @ts-expect-error - simulating legacy/undefined context.permissions
+      delete cashierNoPerms.permissions;
+
+      expect(hasPermission(cashierNoPerms, "products:read")).toBe(true);
+      expect(hasPermission(cashierNoPerms, "categories:read")).toBe(true);
+      expect(hasPermission(cashierNoPerms, "products:create")).toBe(false);
+      expect(hasPermission(cashierNoPerms, "products:read_cost")).toBe(false);
     });
   });
 });

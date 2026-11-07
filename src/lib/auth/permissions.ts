@@ -1,10 +1,11 @@
 import type { AppRole, PermissionKey, TenantContext } from "@/types/auth";
 
 /**
- * Authoritative System Permissions Catalog (Feature 002)
+ * Authoritative System Permissions Catalog (Features 002 & 003)
  * All permissions strictly use colon-separated `<resource>:<action>` format.
  */
 export const SYSTEM_PERMISSIONS = [
+  // Feature 002: Employees
   "employees:read",
   "employees:invite",
   "employees:update_role",
@@ -12,6 +13,16 @@ export const SYSTEM_PERMISSIONS = [
   "employees:remove",
   "employees:invitations_read",
   "employees:invitations_revoke",
+  // Feature 003: Products & Categories
+  "products:read",
+  "products:read_cost",
+  "products:create",
+  "products:update",
+  "products:archive",
+  "categories:read",
+  "categories:create",
+  "categories:update",
+  "categories:archive",
 ] as const;
 
 export type SystemPermission = (typeof SYSTEM_PERMISSIONS)[number];
@@ -30,11 +41,30 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
     "employees:remove",
     "employees:invitations_read",
     "employees:invitations_revoke",
+    "products:read",
+    "products:read_cost",
+    "products:create",
+    "products:update",
+    "products:archive",
+    "categories:read",
+    "categories:create",
+    "categories:update",
+    "categories:archive",
   ],
   manager: [
     "employees:read",
+    "products:read",
+    "products:read_cost",
+    "products:create",
+    "products:update",
+    "categories:read",
+    "categories:create",
+    "categories:update",
   ],
-  cashier: [],
+  cashier: [
+    "products:read",
+    "categories:read",
+  ],
 };
 
 /**
@@ -56,7 +86,7 @@ export function hasPermission(
   }
 
   // Rule 1: Unknown/unregistered permissions MUST ALWAYS return false, even for Owner
-  if (!SYSTEM_PERMISSIONS.includes(permission as PermissionKey)) {
+  if (!SYSTEM_PERMISSIONS.includes(permission as SystemPermission)) {
     return false;
   }
 
@@ -78,4 +108,3 @@ export function hasPermission(
   const rolePerms = ROLE_PERMISSIONS[context.role] ?? [];
   return rolePerms.includes(permission as PermissionKey);
 }
-
