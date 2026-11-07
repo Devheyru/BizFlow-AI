@@ -33,7 +33,16 @@ export type PermissionKey =
   | "employees:suspend"
   | "employees:remove"
   | "employees:invitations_read"
-  | "employees:invitations_revoke";
+  | "employees:invitations_revoke"
+  | "products:read"
+  | "products:read_cost"
+  | "products:create"
+  | "products:update"
+  | "products:archive"
+  | "categories:read"
+  | "categories:create"
+  | "categories:update"
+  | "categories:archive";
 
 // ============================================================================
 // Server Action Result Pattern

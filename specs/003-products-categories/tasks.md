@@ -18,9 +18,9 @@
 
 **Purpose**: Project initialization and shared baseline configuration without altering Features 001/002.
 
-- [ ] T001 Verify local Supabase environment and preceding migration baseline (01 through 09) in `supabase/migrations/`
-- [ ] T002 [P] Extend TypeScript authentication type definitions with the 9 Feature 003 permissions (`products:read`, `products:read_cost`, `products:create`, `products:update`, `products:archive`, `categories:read`, `categories:create`, `categories:update`, `categories:archive`) in `src/types/auth.ts` (FR-032, FR-033)
-- [ ] T003 [P] Define `UnitOfMeasure` union type (`ALLOWED_UOM` array of 13 approved retail values) and product domain models in `src/types/product.ts` (FR-001, BR-017)
+- [X] T001 Verify local Supabase environment and preceding migration baseline (01 through 09) in `supabase/migrations/`
+- [X] T002 [P] Extend TypeScript authentication type definitions with the 9 Feature 003 permissions (`products:read`, `products:read_cost`, `products:create`, `products:update`, `products:archive`, `categories:read`, `categories:create`, `categories:update`, `categories:archive`) in `src/types/auth.ts` (FR-032, FR-033)
+- [X] T003 [P] Define `UnitOfMeasure` union type (`ALLOWED_UOM` array of 13 approved retail values) and product domain models in `src/types/product.ts` (FR-001, BR-017)
 
 ---
 
