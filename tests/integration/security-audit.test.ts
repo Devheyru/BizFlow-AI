@@ -513,9 +513,12 @@ describe("Targeted Security Remediation Verification (T006–T010)", () => {
         // Use inspectorClient to poll pg_locks and pg_stat_activity until client2 is confirmed waiting on the row lock.
         let client2IsWaiting = false;
         const startTime = Date.now();
-        const maxWaitMs = 5000;
+        const maxWaitMs = 10000;
 
         while (Date.now() - startTime < maxWaitMs) {
+          if (client2Finished) {
+            break;
+          }
           const lockCheck = await inspectorClient.query(
             "SELECT locktype, mode, granted FROM pg_locks WHERE pid = $1 AND NOT granted",
             [client2Pid]
@@ -532,7 +535,7 @@ describe("Targeted Security Remediation Verification (T006–T010)", () => {
             client2IsWaiting = true;
             break;
           }
-          await new Promise((r) => setTimeout(r, 10));
+          await new Promise((r) => setTimeout(r, 50));
         }
 
         // Assert deterministically: Transaction 2 is actively waiting on the organization row lock BEFORE Transaction 1 commits

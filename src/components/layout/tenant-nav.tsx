@@ -3,21 +3,25 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users } from "lucide-react";
+import { LayoutDashboard, Users, Package } from "lucide-react";
 import type { AppRole } from "@/types/auth";
 
 interface TenantNavProps {
   slug: string;
   role: AppRole;
+  canViewProducts?: boolean;
 }
 
 /**
- * Tenant Navigation Bar (T045, FR-001)
+ * Tenant Navigation Bar (T045, FR-001, Feature 003 T027)
  * Displays navigation links for the active tenant workspace.
- * Gated by role: employees tab is shown only for Owner, Admin, and Manager.
+ * Gated by permission and role:
+ * - Products navigation item is gated strictly by the authoritative canViewProducts boolean (products:read).
+ * - Employees navigation item is shown only for Owner, Admin, and Manager.
  */
-export function TenantNav({ slug, role }: TenantNavProps) {
+export function TenantNav({ slug, role, canViewProducts = false }: TenantNavProps) {
   const pathname = usePathname();
+  const currentPath = pathname ?? "";
   const canViewEmployees = role === "owner" || role === "admin" || role === "manager";
 
   const navItems = [
@@ -25,15 +29,25 @@ export function TenantNav({ slug, role }: TenantNavProps) {
       name: "Dashboard",
       href: `/${slug}/dashboard`,
       icon: LayoutDashboard,
-      active: pathname === `/${slug}/dashboard`,
+      active: currentPath === `/${slug}/dashboard`,
     },
+    ...(canViewProducts === true
+      ? [
+          {
+            name: "Products",
+            href: `/${slug}/products`,
+            icon: Package,
+            active: currentPath.startsWith(`/${slug}/products`),
+          },
+        ]
+      : []),
     ...(canViewEmployees
       ? [
           {
             name: "Employees",
             href: `/${slug}/employees`,
             icon: Users,
-            active: pathname.startsWith(`/${slug}/employees`),
+            active: currentPath.startsWith(`/${slug}/employees`),
           },
         ]
       : []),
