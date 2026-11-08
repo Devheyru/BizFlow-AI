@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Client as PgClient } from "pg";
-import { SYSTEM_PERMISSIONS } from "@/lib/auth/permissions";
+import { SYSTEM_PERMISSIONS, ROLE_PERMISSIONS } from "@/lib/auth/permissions";
 
 const dbUrl =
   process.env.DATABASE_URL ||
@@ -57,13 +57,15 @@ describe("T047: Bidirectional Permission Catalog Consistency (FR-032, FR-033)", 
       expect(adminPerms).toContain(perm);
     }
 
-    // Manager has only employees:read
-    const managerPerms = roleMap.get("manager") || [];
-    expect(managerPerms).toEqual(["employees:read"]);
+    // Manager permissions match TypeScript ROLE_PERMISSIONS.manager
+    const managerPerms = (roleMap.get("manager") || []).sort();
+    const expectedManagerPerms = [...ROLE_PERMISSIONS.manager].sort();
+    expect(managerPerms).toEqual(expectedManagerPerms);
 
-    // Cashier has no permissions in role_permissions
-    const cashierPerms = roleMap.get("cashier") || [];
-    expect(cashierPerms).toEqual([]);
+    // Cashier permissions match TypeScript ROLE_PERMISSIONS.cashier
+    const cashierPerms = (roleMap.get("cashier") || []).sort();
+    const expectedCashierPerms = [...ROLE_PERMISSIONS.cashier].sort();
+    expect(cashierPerms).toEqual(expectedCashierPerms);
   });
 });
 
