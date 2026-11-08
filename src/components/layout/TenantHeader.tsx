@@ -13,6 +13,7 @@ interface TenantHeaderProps {
   role: AppRole;
   user: User;
   activeOrganizations?: OrganizationSummary[];
+  canViewProducts?: boolean;
 }
 
 export function TenantHeader({
@@ -20,6 +21,7 @@ export function TenantHeader({
   role,
   user,
   activeOrganizations = [],
+  canViewProducts = false,
 }: TenantHeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
@@ -31,7 +33,11 @@ export function TenantHeader({
             currentRole={role}
             activeOrganizations={activeOrganizations}
           />
-          <TenantNav slug={organization.slug} role={role} />
+          <TenantNav
+            slug={organization.slug}
+            role={role}
+            canViewProducts={canViewProducts}
+          />
         </div>
 
         {/* Right: Authenticated User & Actions */}
