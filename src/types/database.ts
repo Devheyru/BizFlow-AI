@@ -1,4 +1,4 @@
-﻿
+
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
@@ -135,6 +135,114 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"product_categories": {
+                  Row: {
+                    "archived_at": string | null,"archived_by": string | null,"created_at": string,"created_by": string,"description": string | null,"id": string,"name": string,"organization_id": string,"status": string,"updated_at": string,"updated_by": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "archived_at"?: string | null,"archived_by"?: string | null,"created_at"?: string,"created_by": string,"description"?: string | null,"id"?: string,"name": string,"organization_id": string,"status"?: string,"updated_at"?: string,"updated_by": string
+                  }
+                  Update: {
+                    "archived_at"?: string | null,"archived_by"?: string | null,"created_at"?: string,"created_by"?: string,"description"?: string | null,"id"?: string,"name"?: string,"organization_id"?: string,"status"?: string,"updated_at"?: string,"updated_by"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "product_categories_archived_by_fkey"
+      columns: ["archived_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "product_categories_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "product_categories_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "product_categories_updated_by_fkey"
+      columns: ["updated_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"product_costs": {
+                  Row: {
+                    "cost_price": number,"created_at": string,"organization_id": string,"product_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cost_price": number,"created_at"?: string,"organization_id": string,"product_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "cost_price"?: number,"created_at"?: string,"organization_id"?: string,"product_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "fk_product_costs_org"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "fk_product_costs_org_product"
+      columns: ["organization_id","product_id"]
+isOneToOne: false
+      referencedRelation: "products"
+      referencedColumns: ["organization_id","id"]
+    }
+                  ]
+                },"products": {
+                  Row: {
+                    "archived_at": string | null,"archived_by": string | null,"barcode": string | null,"category_id": string | null,"created_at": string,"created_by": string,"description": string | null,"id": string,"image_url": string | null,"name": string,"organization_id": string,"selling_price": number,"sku": string,"status": string,"unit_of_measure": string,"updated_at": string,"updated_by": string,"version": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "archived_at"?: string | null,"archived_by"?: string | null,"barcode"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by": string,"description"?: string | null,"id"?: string,"image_url"?: string | null,"name": string,"organization_id": string,"selling_price"?: number,"sku": string,"status"?: string,"unit_of_measure"?: string,"updated_at"?: string,"updated_by": string,"version"?: number
+                  }
+                  Update: {
+                    "archived_at"?: string | null,"archived_by"?: string | null,"barcode"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by"?: string,"description"?: string | null,"id"?: string,"image_url"?: string | null,"name"?: string,"organization_id"?: string,"selling_price"?: number,"sku"?: string,"status"?: string,"unit_of_measure"?: string,"updated_at"?: string,"updated_by"?: string,"version"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "fk_products_org_category"
+      columns: ["organization_id","category_id"]
+isOneToOne: false
+      referencedRelation: "product_categories"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "products_archived_by_fkey"
+      columns: ["archived_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "products_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "products_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "products_updated_by_fkey"
+      columns: ["updated_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "created_at": string,"first_name": string,"id": string,"last_name": string,"phone": string | null,"updated_at": string
@@ -192,6 +300,12 @@ isOneToOne: false
             "accept_organization_invitation":
 { Args: { "p_token_hash": string }; Returns: Json
                            },
+"archive_product":
+{ Args: { "p_expected_version": number,"p_org_id": string,"p_product_id": string }; Returns: Json
+                           },
+"archive_product_category":
+{ Args: { "p_category_id": string,"p_org_id": string }; Returns: Json
+                           },
 "check_user_permission":
 { Args: { "p_org_id": string,"p_permission": string,"p_user_id": string }; Returns: boolean
                            },
@@ -204,11 +318,20 @@ isOneToOne: false
 "create_organization_with_owner":
 { Args: { "p_address"?: string,"p_business_type": string,"p_client_mutation_id": string,"p_country": string,"p_currency": string,"p_email"?: string,"p_name": string,"p_phone"?: string,"p_slug": string,"p_tax_id"?: string,"p_timezone": string }; Returns: Json
                            },
+"create_product":
+{ Args: { "p_barcode"?: string,"p_category_id"?: string,"p_cost_price"?: number,"p_description"?: string,"p_image_url"?: string,"p_name": string,"p_org_id": string,"p_selling_price": number,"p_sku": string,"p_status"?: string,"p_unit_of_measure"?: string }; Returns: Json
+                           },
+"create_product_category":
+{ Args: { "p_description"?: string,"p_name": string,"p_org_id": string }; Returns: Json
+                           },
 "create_recovery_grant":
 { Args: { "p_expires_at": string,"p_nonce_hash": string,"p_session_id": string,"p_user_id"?: string }; Returns: string
                            },
 "decline_organization_invitation":
 { Args: { "p_token_hash": string }; Returns: Json
+                           },
+"get_currency_exponent":
+{ Args: { "p_currency": string }; Returns: number
                            },
 "get_organization_employees":
 { Args: { "p_org_id": string }; Returns: {
@@ -227,14 +350,35 @@ isOneToOne: false
 "resend_organization_invitation":
 { Args: { "p_invitation_id": string,"p_new_expires_at": string,"p_new_token_hash": string }; Returns: Json
                            },
+"restore_product":
+{ Args: { "p_expected_version": number,"p_org_id": string,"p_product_id": string }; Returns: Json
+                           },
+"restore_product_category":
+{ Args: { "p_category_id": string,"p_org_id": string }; Returns: Json
+                           },
 "revoke_organization_invitation":
 { Args: { "p_invitation_id": string }; Returns: Json
+                           },
+"show_limit":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
+"show_trgm":
+{ Args: { "": string }; Returns: (string)[]
+                           },
+"toggle_product_status":
+{ Args: { "p_expected_version": number,"p_new_status": string,"p_org_id": string,"p_product_id": string }; Returns: Json
                            },
 "update_organization_member_role":
 { Args: { "p_new_role": Database["public"]['Enums']["app_role"],"p_org_id": string,"p_target_membership_id": string }; Returns: Json
                            },
 "update_organization_member_status":
 { Args: { "p_new_status": Database["public"]['Enums']["membership_status"],"p_org_id": string,"p_target_membership_id": string }; Returns: Json
+                           },
+"update_product":
+{ Args: { "p_barcode"?: string,"p_category_id"?: string,"p_cost_operation"?: string,"p_cost_price"?: number,"p_description"?: string,"p_expected_version": number,"p_image_url"?: string,"p_name": string,"p_org_id": string,"p_product_id": string,"p_selling_price": number,"p_sku": string,"p_unit_of_measure"?: string }; Returns: Json
+                           },
+"update_product_category":
+{ Args: { "p_category_id": string,"p_description"?: string,"p_name": string,"p_org_id": string }; Returns: Json
                            },
 "validate_invitation_token":
 { Args: { "p_token_hash": string }; Returns: Json
