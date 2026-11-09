@@ -137,12 +137,12 @@
 **Independent Test**: Execute `npm run test:integration -- tests/integration/product-lifecycle.test.ts`. Verify that direct transitions involving `archived` in toggle are rejected (`P0015`), archiving retains SKU/barcode so other products cannot claim them (`P0006`), and restoring returns product to `active`.
 
 ### Tests for User Story 5
-- [ ] T049 [P] [US5] Integration test product lifecycle transitions (`toggle_product_status` rejecting `archived` with `P0015`, `archive_product` capturing audit fields, `restore_product` returning to `active`, and verifying SKU/barcode cannot be claimed by another product while archived) in `tests/integration/product-lifecycle.test.ts` (FR-017 to FR-022, SC-007)
+- [X] T049 [P] [US5] Integration test product lifecycle transitions (`toggle_product_status` rejecting `archived` with `P0015`, `archive_product` capturing audit fields, `restore_product` returning to `active`, and verifying SKU/barcode cannot be claimed by another product while archived) in `tests/integration/product-lifecycle.test.ts` (FR-017 to FR-022, SC-007)
 
 ### Implementation for User Story 5
-- [ ] T050 [US5] Implement `toggleProductStatusAction`, `archiveProductAction`, and `restoreProductAction` Server Actions gated by `products:update` and `products:archive` in `src/actions/product-actions.ts` (FR-018, FR-019, FR-020)
-- [ ] T051 [P] [US5] Implement product lifecycle action controls (toggle status switch, archive confirmation dialog, restore confirmation dialog) in `src/components/products/ProductLifecycleActions.tsx` (FR-018, FR-019, FR-020)
-- [ ] T052 [US5] Integrate lifecycle action controls into `ProductTable.tsx` and `ProductDetailView.tsx` with instant optimistic feedback and OCC conflict recovery in `src/components/products/ProductTable.tsx` and `src/components/products/ProductDetailView.tsx` (FR-017 to FR-023)
+- [X] T050 [US5] Implement `toggleProductStatusAction`, `archiveProductAction`, and `restoreProductAction` Server Actions gated by `products:update` and `products:archive` in `src/actions/product-actions.ts` (FR-018, FR-019, FR-020)
+- [X] T051 [P] [US5] Implement product lifecycle action controls (toggle status switch, archive confirmation dialog, restore confirmation dialog) in `src/components/products/ProductLifecycleActions.tsx` (FR-018, FR-019, FR-020)
+- [X] T052 [US5] Integrate lifecycle action controls into `ProductTable.tsx` and `ProductDetailView.tsx` with instant optimistic feedback and OCC conflict recovery in `src/components/products/ProductTable.tsx` and `src/components/products/ProductDetailView.tsx` (FR-017 to FR-023)
 
 **Checkpoint**: User Story 5 complete. Products can be deactivated, archived, and restored with permanent identifier protection.
 
