@@ -51,6 +51,8 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
   // 2. Authoritative permission checks
   const canReadCost = hasPermission(context, "products:read_cost");
   const canCreate = hasPermission(context, "products:create");
+  const canUpdate = hasPermission(context, "products:update");
+  const canArchive = hasPermission(context, "products:archive");
   const canManageCategories = hasPermission(context, "categories:read");
   const canCreateCategory = hasPermission(context, "categories:create");
   const canUpdateCategory = hasPermission(context, "categories:update");
@@ -336,6 +338,8 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
         products={products}
         canReadCost={canReadCost}
         canCreate={canCreate}
+        canUpdate={canUpdate}
+        canArchive={canArchive}
         currency={context.organization.currency}
         sortBy={sortBy}
         sortOrder={sortOrder}

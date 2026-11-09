@@ -19,8 +19,9 @@ import {
   RefreshCw,
   Archive,
 } from "lucide-react";
-import type { Product } from "@/types/product";
+import type { Product, ProductStatus } from "@/types/product";
 import { calculateGrossMargin, formatCurrency, formatGrossMargin } from "@/lib/products/margin";
+import { ProductLifecycleActions } from "./ProductLifecycleActions";
 
 export interface AuditEventItem {
   id: string;
@@ -38,6 +39,7 @@ export interface ProductDetailViewProps {
   currency: string;
   canReadCost: boolean;
   canUpdate?: boolean;
+  canArchive?: boolean;
   slug: string;
   auditEvents?: AuditEventItem[];
 }
@@ -58,10 +60,18 @@ export function ProductDetailView({
   currency,
   canReadCost,
   canUpdate = false,
+  canArchive = false,
   slug,
   auditEvents = [],
 }: ProductDetailViewProps) {
   const [imageError, setImageError] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
+  const [currentVersion, setCurrentVersion] = useState<number>(product.version);
+
+  React.useEffect(() => {
+    setCurrentStatus(product.status);
+    setCurrentVersion(product.version);
+  }, [product.status, product.version]);
 
   // Compute margin metrics only if caller has products:read_cost
   const marginMetrics = canReadCost
@@ -114,17 +124,17 @@ export function ProductDetailView({
             </h1>
             <span
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                statusColorMap[product.status]
+                statusColorMap[currentStatus]
               }`}
             >
-              {statusLabelMap[product.status]}
+              {statusLabelMap[currentStatus]}
             </span>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3">
-          {canUpdate && product.status !== "archived" && (
+        <div className="flex flex-wrap items-center gap-3">
+          {canUpdate && currentStatus !== "archived" && (
             <Link
               href={`/${slug}/products/${product.id}/edit`}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 rounded-lg shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
@@ -133,6 +143,24 @@ export function ProductDetailView({
               Edit Product
             </Link>
           )}
+
+          <ProductLifecycleActions
+            slug={slug}
+            productId={product.id}
+            productName={product.name}
+            sku={product.sku}
+            initialStatus={currentStatus}
+            initialVersion={currentVersion}
+            canUpdate={canUpdate}
+            canArchive={canArchive}
+            variant="detail"
+            onStatusChange={(newStatus, newVersion) => {
+              setCurrentStatus(newStatus);
+              setCurrentVersion(newVersion);
+              product.status = newStatus;
+              product.version = newVersion;
+            }}
+          />
         </div>
       </div>
 

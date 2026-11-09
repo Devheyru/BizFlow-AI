@@ -149,6 +149,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   }
 
   const canUpdate = hasPermission(context, "products:update");
+  const canArchive = hasPermission(context, "products:archive");
 
   const product: Product = {
     id: productRow.id,
@@ -178,6 +179,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
       currency={context.organization.currency}
       canReadCost={canReadCost}
       canUpdate={canUpdate}
+      canArchive={canArchive}
       slug={slug}
       auditEvents={auditEvents}
     />

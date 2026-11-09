@@ -247,3 +247,48 @@ export const UpdateProductSchema = z
 
 export type UpdateProductInput = z.infer<typeof UpdateProductSchema>;
 
+/**
+ * Zod validation schema for Product Status Toggle (T050, FR-018).
+ * Enforces valid product ID UUID, positive integer expected version, and 2-state toggle status.
+ */
+export const ToggleProductStatusSchema = z.object({
+  productId: z.string().uuid("Invalid product ID"),
+  expectedVersion: z
+    .number({ invalid_type_error: "Expected version must be a number" })
+    .int("Expected version must be an integer")
+    .min(1, "Expected version must be greater than or equal to 1"),
+  newStatus: z.enum(["active", "inactive"], {
+    errorMap: () => ({ message: "New status must be active or inactive" }),
+  }),
+});
+
+export type ToggleProductStatusInput = z.infer<typeof ToggleProductStatusSchema>;
+
+/**
+ * Zod validation schema for Product Archival (T050, FR-019).
+ * Enforces valid product ID UUID and positive integer expected version.
+ */
+export const ArchiveProductSchema = z.object({
+  productId: z.string().uuid("Invalid product ID"),
+  expectedVersion: z
+    .number({ invalid_type_error: "Expected version must be a number" })
+    .int("Expected version must be an integer")
+    .min(1, "Expected version must be greater than or equal to 1"),
+});
+
+export type ArchiveProductInput = z.infer<typeof ArchiveProductSchema>;
+
+/**
+ * Zod validation schema for Product Restoration (T050, FR-020).
+ * Enforces valid product ID UUID and positive integer expected version.
+ */
+export const RestoreProductSchema = z.object({
+  productId: z.string().uuid("Invalid product ID"),
+  expectedVersion: z
+    .number({ invalid_type_error: "Expected version must be a number" })
+    .int("Expected version must be an integer")
+    .min(1, "Expected version must be greater than or equal to 1"),
+});
+
+export type RestoreProductInput = z.infer<typeof RestoreProductSchema>;
+

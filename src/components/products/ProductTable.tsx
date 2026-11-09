@@ -13,11 +13,14 @@ import {
 } from "lucide-react";
 import type { ProductListItem, ProductSortField, SortOrder } from "@/types/product";
 import { formatCurrency, formatGrossMargin } from "@/lib/products/margin";
+import { ProductLifecycleActions } from "./ProductLifecycleActions";
 
 export interface ProductTableProps {
   products: ProductListItem[];
   canReadCost: boolean;
   canCreate?: boolean;
+  canUpdate?: boolean;
+  canArchive?: boolean;
   currency: string;
   sortBy?: ProductSortField;
   sortOrder?: SortOrder;
@@ -36,6 +39,8 @@ export function ProductTable({
   products,
   canReadCost,
   canCreate = false,
+  canUpdate = false,
+  canArchive = false,
   currency,
   sortBy = "name",
   sortOrder = "asc",
@@ -176,6 +181,12 @@ export function ProductTable({
             <th scope="col" className="px-3 py-3.5 text-center">
               Status
             </th>
+
+            {(canUpdate || canArchive) && (
+              <th scope="col" className="px-3 py-3.5 text-right">
+                Actions
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -301,6 +312,23 @@ export function ProductTable({
                     {product.status}
                   </span>
                 </td>
+
+                {/* Lifecycle Actions */}
+                {(canUpdate || canArchive) && (
+                  <td className="px-3 py-3.5 whitespace-nowrap text-right">
+                    <ProductLifecycleActions
+                      slug={slug}
+                      productId={product.id}
+                      productName={product.name}
+                      sku={product.sku}
+                      initialStatus={product.status}
+                      initialVersion={product.version}
+                      canUpdate={canUpdate}
+                      canArchive={canArchive}
+                      variant="table"
+                    />
+                  </td>
+                )}
               </tr>
             );
           })}

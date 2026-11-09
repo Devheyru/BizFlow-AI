@@ -5,7 +5,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { resolveTenantContext } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/auth/permissions";
-import { CreateProductSchema, UpdateProductSchema } from "@/lib/validations/product";
+import {
+  CreateProductSchema,
+  UpdateProductSchema,
+  ToggleProductStatusSchema,
+  ArchiveProductSchema,
+  RestoreProductSchema,
+} from "@/lib/validations/product";
 import { calculateGrossMargin } from "@/lib/products/margin";
 import { removeProductImage } from "@/lib/products/image-storage";
 import type { ActionResult } from "@/types/auth";
@@ -62,7 +68,7 @@ interface RpcProductData {
 
 const KNOWN_ERROR_CODES: Record<string, { code: string; message: string }> = {
   P0001: { code: "EMAIL_UNVERIFIED", message: "Email verification required." },
-  P0002: { code: "RESOURCE_NOT_FOUND", message: "Target category was not found in this organization." },
+  P0002: { code: "RESOURCE_NOT_FOUND", message: "Product or resource not found in this organization." },
   P0003: { code: "UNAUTHENTICATED", message: "Authentication required." },
   P0004: { code: "UNAUTHORIZED_MEMBERSHIP", message: "Caller is not an active member of this organization." },
   P0005: { code: "FORBIDDEN", message: "Insufficient permissions to perform this action." },
@@ -538,6 +544,17 @@ export async function toggleProductStatusAction(
   newStatus: "active" | "inactive"
 ): Promise<ActionResult<{ id: string; status: "active" | "inactive"; version: number }>> {
   try {
+    const parsed = ToggleProductStatusSchema.safeParse({ productId, expectedVersion, newStatus });
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: parsed.error.errors[0]?.message || "Invalid product status toggle parameters.",
+        },
+      };
+    }
+
     const tenantRes = await resolveTenantContext(slug);
     if (!tenantRes.ok) {
       return {
@@ -618,6 +635,17 @@ export async function archiveProductAction(
   expectedVersion: number
 ): Promise<ActionResult<{ id: string; status: "archived"; version: number; archived_at: string }>> {
   try {
+    const parsed = ArchiveProductSchema.safeParse({ productId, expectedVersion });
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: parsed.error.errors[0]?.message || "Invalid product archival parameters.",
+        },
+      };
+    }
+
     const tenantRes = await resolveTenantContext(slug);
     if (!tenantRes.ok) {
       return {
@@ -700,6 +728,17 @@ export async function restoreProductAction(
   expectedVersion: number
 ): Promise<ActionResult<{ id: string; status: "active"; version: number }>> {
   try {
+    const parsed = RestoreProductSchema.safeParse({ productId, expectedVersion });
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: parsed.error.errors[0]?.message || "Invalid product restoration parameters.",
+        },
+      };
+    }
+
     const tenantRes = await resolveTenantContext(slug);
     if (!tenantRes.ok) {
       return {
@@ -758,6 +797,86 @@ export async function restoreProductAction(
     revalidatePath(`/${slug}/products/${productId}`, "page");
 
     return { success: true, data: rpcPayload.data };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    return {
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message,
+      },
+    };
+  }
+}
+
+/**
+ * Fetches the latest authoritative status and version of a product.
+ * Used for authoritative recovery following concurrency conflicts (OCC / P0010).
+ */
+export async function getProductStateAction(
+  slug: string,
+  productId: string
+): Promise<ActionResult<{ id: string; status: ProductStatus; version: number; archived_at: string | null }>> {
+  try {
+    if (!productId || typeof productId !== "string" || !/^[0-9a-f-]{36}$/i.test(productId)) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid product ID",
+        },
+      };
+    }
+
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    if (!hasPermission(context, "products:read")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized: missing products:read permission.",
+        },
+      };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, status, version, archived_at")
+      .eq("organization_id", context.organization.id)
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return {
+        success: false,
+        error: {
+          code: "RESOURCE_NOT_FOUND",
+          message: "Product not found.",
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        id: data.id,
+        status: data.status as ProductStatus,
+        version: data.version,
+        archived_at: data.archived_at,
+      },
+    };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "An unexpected error occurred.";
     return {
