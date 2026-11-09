@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { resolveTenantContext } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/auth/permissions";
-import { CreateProductSchema } from "@/lib/validations/product";
+import { CreateProductSchema, UpdateProductSchema } from "@/lib/validations/product";
 import { calculateGrossMargin } from "@/lib/products/margin";
+import { removeProductImage } from "@/lib/products/image-storage";
 import type { ActionResult } from "@/types/auth";
 import type { ProductStatus, UnitOfMeasure } from "@/types/product";
 
@@ -68,10 +69,10 @@ const KNOWN_ERROR_CODES: Record<string, { code: string; message: string }> = {
   P0006: { code: "IDENTIFIER_EXISTS", message: "A product with this SKU or barcode already exists in this organization." },
   P0007: { code: "NEGATIVE_PRICE", message: "Selling price and cost price cannot be negative." },
   P0008: { code: "MISSING_REQUIRED_PRICE", message: "Cost price is required for this operation." },
-  P0009: { code: "VALIDATION_ERROR", message: "Invalid product parameters or decimal precision exceeded for organization currency." },
-  P0010: { code: "CONCURRENCY_CONFLICT", message: "Stale update conflict: version mismatch." },
-  P0015: { code: "STATE_CONFLICT", message: "Conflict with current item or category state." },
-  P0016: { code: "INVALID_COST_OPERATION", message: "Invalid cost operation." },
+  P0009: { code: "INVALID_PARAMETER", message: "Invalid product parameters provided." },
+  P0010: { code: "CONCURRENCY_CONFLICT", message: "This product was modified by another user. Please reload the latest data." },
+  P0015: { code: "STATE_CONFLICT", message: "This operation conflicts with the current product or category status." },
+  P0016: { code: "INVALID_COST_OPERATION", message: "Invalid cost operation specified." },
 };
 
 // ============================================================================
@@ -226,6 +227,537 @@ export async function createProductAction(
     revalidatePath(`/${slug}/products`, "page");
 
     return { success: true, data: response };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    return {
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message,
+      },
+    };
+  }
+}
+
+// ============================================================================
+// Phase 5 Server Actions (T039, T040, US3)
+// ============================================================================
+
+/**
+ * Generates dynamic short-lived signed URL for private product images (T039, US3, FR-042, BR-018).
+ * Dual URL protocol:
+ * - External HTTPS URLs: returned as-is (expiresIn: 0)
+ * - Internal Storage relative object paths: validates tenant folder prefix and generates 1-hour signed URL
+ */
+export async function getSignedProductImageUrlAction(
+  slug: string,
+  imagePath: string
+): Promise<ActionResult<{ signedUrl: string; expiresIn: number }>> {
+  try {
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    if (!hasPermission(context, "products:read")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized: missing products:read permission.",
+        },
+      };
+    }
+
+    if (imagePath.startsWith("https://")) {
+      return {
+        success: true,
+        data: {
+          signedUrl: imagePath,
+          expiresIn: 0,
+        },
+      };
+    }
+
+    // Verify tenant folder prefix matches active organization
+    if (!imagePath.startsWith(`${context.organization.id}/`)) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized image path: folder prefix must match active organization.",
+        },
+      };
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.storage
+      .from("product-images")
+      .createSignedUrl(imagePath, 3600);
+
+    if (error || !data?.signedUrl) {
+      return {
+        success: false,
+        error: {
+          code: "STORAGE_ERROR",
+          message: "Failed to generate signed image URL.",
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        signedUrl: data.signedUrl,
+        expiresIn: 3600,
+      },
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    return {
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message,
+      },
+    };
+  }
+}
+
+/**
+ * Updates an existing product with OCC version protection and safe image replacement lifecycle (T040, US3).
+ */
+export async function updateProductAction(
+  slug: string,
+  productId: string,
+  rawInput: unknown
+): Promise<ActionResult<ProductDetailResponse>> {
+  try {
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    if (!hasPermission(context, "products:update")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized: missing products:update permission.",
+        },
+      };
+    }
+
+    const parsed = UpdateProductSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid product parameters provided.",
+          details: parsed.error.flatten().fieldErrors,
+        },
+      };
+    }
+    const input = parsed.data;
+
+    // Confidential cost permission guard
+    if (input.cost_operation === "set" || input.cost_operation === "clear") {
+      if (!hasPermission(context, "products:read_cost")) {
+        return {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Unauthorized: modifying cost requires products:read_cost permission.",
+          },
+        };
+      }
+    }
+
+    const supabase = await createClient();
+
+    // Query existing image to coordinate safe edit-mode image replacement lifecycle
+    const { data: existingProductRecord } = await supabase
+      .from("products")
+      .select("image_url")
+      .eq("id", productId)
+      .eq("organization_id", context.organization.id)
+      .maybeSingle();
+
+    const previousImagePath = existingProductRecord?.image_url;
+
+    // Execute update_product RPC with OCC version check
+    const { data: rawRpcData, error } = await supabase.rpc("update_product", {
+      p_org_id: context.organization.id,
+      p_product_id: productId,
+      p_expected_version: input.expected_version,
+      p_name: input.name,
+      p_sku: input.sku,
+      p_selling_price: input.selling_price,
+      p_unit_of_measure: input.unit_of_measure,
+      p_barcode: input.barcode ?? undefined,
+      p_description: input.description ?? undefined,
+      p_category_id: input.category_id ?? undefined,
+      p_cost_price: input.cost_price ?? undefined,
+      p_cost_operation: input.cost_operation,
+      p_image_url: input.image_url ?? undefined,
+    });
+
+    if (error) {
+      // Rollback cleanup: If newly uploaded storage object was supplied and RPC failed, remove newly uploaded object
+      if (
+        input.image_url &&
+        input.image_url !== previousImagePath &&
+        input.image_url.startsWith(`${context.organization.id}/`)
+      ) {
+        await removeProductImage(supabase, input.image_url, {
+          operation: "rollback_new_image",
+          organizationId: context.organization.id,
+          productId,
+        });
+      }
+
+      const mapped = KNOWN_ERROR_CODES[error.code] || {
+        code: error.code || "RPC_ERROR",
+        message: error.message || "Failed to update product.",
+      };
+      return {
+        success: false,
+        error: {
+          code: mapped.code,
+          message: mapped.message,
+        },
+      };
+    }
+
+    const rpcPayload = rawRpcData as { success?: boolean; data?: RpcProductData };
+    if (!rpcPayload?.success || !rpcPayload?.data) {
+      if (
+        input.image_url &&
+        input.image_url !== previousImagePath &&
+        input.image_url.startsWith(`${context.organization.id}/`)
+      ) {
+        await removeProductImage(supabase, input.image_url, {
+          operation: "rollback_new_image",
+          organizationId: context.organization.id,
+          productId,
+        });
+      }
+
+      return {
+        success: false,
+        error: {
+          code: "RPC_ERROR",
+          message: "Database returned an invalid response structure.",
+        },
+      };
+    }
+
+    const updatedProduct = rpcPayload.data;
+
+    // Post-commit cleanup: If previous image was internal Storage object and was replaced, remove it post-commit
+    if (
+      previousImagePath &&
+      previousImagePath !== input.image_url &&
+      previousImagePath.startsWith(`${context.organization.id}/`)
+    ) {
+      await removeProductImage(supabase, previousImagePath, {
+        operation: "post_commit_superseded_image",
+        organizationId: context.organization.id,
+        productId,
+      });
+    }
+
+    const canReadCost = hasPermission(context, "products:read_cost");
+    const sellingPrice = Number(updatedProduct.selling_price);
+
+    const response: ProductDetailResponse = {
+      id: updatedProduct.id,
+      organization_id: updatedProduct.organization_id,
+      name: updatedProduct.name,
+      sku: updatedProduct.sku,
+      barcode: updatedProduct.barcode ?? null,
+      category_id: updatedProduct.category_id ?? null,
+      selling_price: sellingPrice,
+      unit_of_measure: updatedProduct.unit_of_measure,
+      status: updatedProduct.status,
+      version: updatedProduct.version,
+      image_url: updatedProduct.image_url ?? null,
+      created_at: updatedProduct.created_at,
+      ...(canReadCost
+        ? {
+            cost_price:
+              updatedProduct.cost_price !== null && updatedProduct.cost_price !== undefined
+                ? Number(updatedProduct.cost_price)
+                : null,
+            gross_margin:
+              updatedProduct.cost_price !== null && updatedProduct.cost_price !== undefined
+                ? calculateGrossMargin(sellingPrice, Number(updatedProduct.cost_price)).grossMarginPercentage
+                : null,
+          }
+        : {}),
+    };
+
+    revalidatePath(`/${slug}/products`, "page");
+    revalidatePath(`/${slug}/products/${productId}`, "page");
+
+    return { success: true, data: response };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    return {
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message,
+      },
+    };
+  }
+}
+
+/**
+ * Toggles product status between active and inactive with OCC version checking.
+ */
+export async function toggleProductStatusAction(
+  slug: string,
+  productId: string,
+  expectedVersion: number,
+  newStatus: "active" | "inactive"
+): Promise<ActionResult<{ id: string; status: "active" | "inactive"; version: number }>> {
+  try {
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    if (!hasPermission(context, "products:update")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized: missing products:update permission.",
+        },
+      };
+    }
+
+    const supabase = await createClient();
+    const { data: rawRpcData, error } = await supabase.rpc("toggle_product_status", {
+      p_org_id: context.organization.id,
+      p_product_id: productId,
+      p_expected_version: expectedVersion,
+      p_new_status: newStatus,
+    });
+
+    if (error) {
+      const mapped = KNOWN_ERROR_CODES[error.code] || {
+        code: error.code || "RPC_ERROR",
+        message: error.message || "Failed to update product status.",
+      };
+      return {
+        success: false,
+        error: {
+          code: mapped.code,
+          message: mapped.message,
+        },
+      };
+    }
+
+    const rpcPayload = rawRpcData as { success?: boolean; data?: { id: string; status: "active" | "inactive"; version: number } };
+    if (!rpcPayload?.success || !rpcPayload?.data) {
+      return {
+        success: false,
+        error: {
+          code: "RPC_ERROR",
+          message: "Database returned an invalid response structure.",
+        },
+      };
+    }
+
+    revalidatePath(`/${slug}/products`, "page");
+    revalidatePath(`/${slug}/products/${productId}`, "page");
+
+    return { success: true, data: rpcPayload.data };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    return {
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message,
+      },
+    };
+  }
+}
+
+/**
+ * Archives a product with OCC version checking.
+ */
+export async function archiveProductAction(
+  slug: string,
+  productId: string,
+  expectedVersion: number
+): Promise<ActionResult<{ id: string; status: "archived"; version: number; archived_at: string }>> {
+  try {
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    if (!hasPermission(context, "products:archive")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized: missing products:archive permission.",
+        },
+      };
+    }
+
+    const supabase = await createClient();
+    const { data: rawRpcData, error } = await supabase.rpc("archive_product", {
+      p_org_id: context.organization.id,
+      p_product_id: productId,
+      p_expected_version: expectedVersion,
+    });
+
+    if (error) {
+      const mapped = KNOWN_ERROR_CODES[error.code] || {
+        code: error.code || "RPC_ERROR",
+        message: error.message || "Failed to archive product.",
+      };
+      return {
+        success: false,
+        error: {
+          code: mapped.code,
+          message: mapped.message,
+        },
+      };
+    }
+
+    const rpcPayload = rawRpcData as {
+      success?: boolean;
+      data?: { id: string; status: "archived"; version: number; archived_at: string };
+    };
+    if (!rpcPayload?.success || !rpcPayload?.data) {
+      return {
+        success: false,
+        error: {
+          code: "RPC_ERROR",
+          message: "Database returned an invalid response structure.",
+        },
+      };
+    }
+
+    revalidatePath(`/${slug}/products`, "page");
+    revalidatePath(`/${slug}/products/${productId}`, "page");
+
+    return { success: true, data: rpcPayload.data };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+    return {
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message,
+      },
+    };
+  }
+}
+
+/**
+ * Restores an archived product to active with OCC version checking.
+ */
+export async function restoreProductAction(
+  slug: string,
+  productId: string,
+  expectedVersion: number
+): Promise<ActionResult<{ id: string; status: "active"; version: number }>> {
+  try {
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    if (!hasPermission(context, "products:archive")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized: missing products:archive permission.",
+        },
+      };
+    }
+
+    const supabase = await createClient();
+    const { data: rawRpcData, error } = await supabase.rpc("restore_product", {
+      p_org_id: context.organization.id,
+      p_product_id: productId,
+      p_expected_version: expectedVersion,
+    });
+
+    if (error) {
+      const mapped = KNOWN_ERROR_CODES[error.code] || {
+        code: error.code || "RPC_ERROR",
+        message: error.message || "Failed to restore product.",
+      };
+      return {
+        success: false,
+        error: {
+          code: mapped.code,
+          message: mapped.message,
+        },
+      };
+    }
+
+    const rpcPayload = rawRpcData as { success?: boolean; data?: { id: string; status: "active"; version: number } };
+    if (!rpcPayload?.success || !rpcPayload?.data) {
+      return {
+        success: false,
+        error: {
+          code: "RPC_ERROR",
+          message: "Database returned an invalid response structure.",
+        },
+      };
+    }
+
+    revalidatePath(`/${slug}/products`, "page");
+    revalidatePath(`/${slug}/products/${productId}`, "page");
+
+    return { success: true, data: rpcPayload.data };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "An unexpected error occurred.";
     return {

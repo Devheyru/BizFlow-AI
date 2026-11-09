@@ -142,3 +142,108 @@ export const CreateProductSchema = z.object({
 
 export type CreateProductInput = z.infer<typeof CreateProductSchema>;
 
+/**
+ * Approved cost operation modes for product update (T037, FR-008, FR-023).
+ */
+export const COST_OPERATIONS = ["unchanged", "set", "clear"] as const;
+export type CostOperation = (typeof COST_OPERATIONS)[number];
+
+/**
+ * Validates that an image URL/path in update operations is either:
+ * 1. A valid external HTTPS URL (via isValidExternalHttpsUrl)
+ * 2. A canonical internal Supabase Storage relative object name: {org_id}/{product_id}/{filename}
+ * Rejects whitespace anywhere in the string.
+ */
+export function isValidUpdateProductImageUrl(val: string): boolean {
+  if (typeof val !== "string") {
+    return false;
+  }
+  if (/\s/.test(val)) {
+    return false;
+  }
+  if (isValidExternalHttpsUrl(val)) {
+    return true;
+  }
+  if (STORAGE_OBJECT_PATH_REGEX.test(val)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Zod validation schema for Product Updates (T037, FR-008, FR-023).
+ * Requires `expected_version` for OCC conflict detection and `cost_operation`
+ * enum to safely distinguish setting, clearing, or leaving cost unchanged.
+ */
+export const UpdateProductSchema = z
+  .object({
+    expected_version: z
+      .number({ invalid_type_error: "Expected version must be a number" })
+      .int("Expected version must be an integer")
+      .min(1, "Expected version must be greater than or equal to 1"),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Product name is required")
+      .max(150, "Name must be 150 characters or less"),
+    sku: z
+      .string()
+      .trim()
+      .min(1, "SKU is required")
+      .max(50, "SKU must be 50 characters or less")
+      .regex(/^[A-Za-z0-9._-]+$/, "SKU contains invalid characters")
+      .transform((v) => v.toUpperCase()),
+    selling_price: z
+      .number({ invalid_type_error: "Selling price must be a valid number" })
+      .min(0, "Selling price must be greater than or equal to 0")
+      .max(MAX_MONETARY_NUMERIC_VALUE, "Selling price exceeds maximum allowed value"),
+    unit_of_measure: z.enum(ALLOWED_UOM).default("piece"),
+    barcode: z
+      .string()
+      .trim()
+      .min(3, "Barcode must be at least 3 characters")
+      .max(50, "Barcode must be 50 characters or less")
+      .regex(/^[A-Za-z0-9-]{3,50}$/, "Barcode contains invalid characters")
+      .optional()
+      .nullable(),
+    description: z
+      .string()
+      .trim()
+      .max(2000, "Description must be 2000 characters or less")
+      .optional()
+      .nullable(),
+    category_id: z
+      .string()
+      .uuid("Invalid category ID")
+      .optional()
+      .nullable(),
+    cost_operation: z.enum(COST_OPERATIONS).default("unchanged"),
+    cost_price: z
+      .number({ invalid_type_error: "Cost price must be a valid number" })
+      .min(0, "Cost price must be greater than or equal to 0")
+      .max(MAX_MONETARY_NUMERIC_VALUE, "Cost price exceeds maximum allowed value")
+      .optional()
+      .nullable(),
+    image_url: z
+      .string()
+      .refine((val) => isValidUpdateProductImageUrl(val), {
+        message: "Image URL must be a valid external HTTPS URL or internal storage object name",
+      })
+      .optional()
+      .nullable(),
+  })
+  .refine(
+    (data) => {
+      if (data.cost_operation === "set" && (data.cost_price === undefined || data.cost_price === null)) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Cost price is required when cost operation is set",
+      path: ["cost_price"],
+    }
+  );
+
+export type UpdateProductInput = z.infer<typeof UpdateProductSchema>;
+
