@@ -1,6 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Client as PgClient } from "pg";
+import { updateProductAction } from "@/actions/product-actions";
+import { clearInMemoryCookieJar, createClient as createServerClient } from "@/lib/supabase/server";
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -24,7 +30,8 @@ describe("T036: update_product RPC & Optimistic Concurrency Control (US3)", () =
   let cashierClient: SupabaseClient;
   let orgBClient: SupabaseClient;
 
-  // User IDs
+  // User IDs & Emails
+  let ownerEmail: string;
   let ownerUserId: string;
   let managerUserId: string;
   let cashierUserId: string;
@@ -52,7 +59,7 @@ describe("T036: update_product RPC & Optimistic Concurrency Control (US3)", () =
     });
 
     const timestamp = Date.now();
-    const ownerEmail = `owner_occ_${timestamp}@bizflow-test.internal`;
+    ownerEmail = `owner_occ_${timestamp}@bizflow-test.internal`;
     const mgrEmail = `mgr_occ_${timestamp}@bizflow-test.internal`;
     const cashEmail = `cash_occ_${timestamp}@bizflow-test.internal`;
     const orgBEmail = `orgb_occ_${timestamp}@bizflow-test.internal`;
@@ -645,45 +652,200 @@ describe("T036: update_product RPC & Optimistic Concurrency Control (US3)", () =
   });
 
   // ==========================================================================
-  // Group 5: Server Action Update & Image Replacement Lifecycle
+  // Group 5: Server Action Update & Live Storage Lifecycle (Task 2)
   // ==========================================================================
-  describe("Group 5: Server Action updateProductAction Lifecycle", () => {
-    it("coordinates safe image replacement without pre-commit deletion", async () => {
-      const prod = await createTestProduct("SA-IMG-REPLACE");
-      const initialPath = `${orgAId}/${prod.id}/initial.jpg`;
+  describe("Group 5: Server Action updateProductAction Live Storage Lifecycle", () => {
+    it("executes live image replacement via updateProductAction: updates DB reference, removes old storage object, keeps new object", async () => {
+      const prod = await createTestProduct("SA-IMG-REPLACE-LIVE");
+      const initialPath = `${orgAId}/${prod.id}/initial-live.png`;
+      const replacementPath = `${orgAId}/${prod.id}/replacement-live.png`;
 
-      // Set initial image in DB
+      // 1. Upload initial image to live Storage bucket and register in DB
+      const dummyPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+      const { error: initUpErr } = await adminClient.storage
+        .from("product-images")
+        .upload(initialPath, dummyPng, { contentType: "image/png", upsert: true });
+      expect(initUpErr).toBeNull();
+
       await pgClient.query("UPDATE public.products SET image_url = $1 WHERE id = $2;", [initialPath, prod.id]);
 
-      // Mock uploading new image into storage bucket
-      const newPath = `${orgAId}/${prod.id}/new.jpg`;
-      await adminClient.storage
-        .from("product-images")
-        .upload(newPath, Buffer.from("fake-image-bytes"), { contentType: "image/jpeg", upsert: true });
+      // Verify initial image exists in live Storage
+      const { data: initCheck } = await adminClient.storage.from("product-images").download(initialPath);
+      expect(initCheck).not.toBeNull();
 
-      // Run updateProductAction via owner
-      // Since Server Action requires headers/cookies in Next.js, we test the RPC/Action contract
-      // or verify post-commit cleanup directly
-      const { data: updateRes, error } = await ownerClient.rpc("update_product", {
-        p_org_id: orgAId,
-        p_product_id: prod.id,
-        p_expected_version: 1,
-        p_name: "Product With Replaced Image",
-        p_sku: prod.sku,
-        p_selling_price: 35.0,
-        p_image_url: newPath,
-        p_cost_operation: "unchanged",
+      // 2. Upload replacement image to live Storage
+      const { error: repUpErr } = await adminClient.storage
+        .from("product-images")
+        .upload(replacementPath, dummyPng, { contentType: "image/png", upsert: true });
+      expect(repUpErr).toBeNull();
+
+      // 3. Establish authenticated owner session in server cookie jar
+      clearInMemoryCookieJar();
+      const serverClient = await createServerClient();
+      const { error: authErr } = await serverClient.auth.signInWithPassword({
+        email: ownerEmail,
+        password: testPassword,
+      });
+      expect(authErr).toBeNull();
+
+      // 4. Execute updateProductAction with the replacement image
+      const result = await updateProductAction(orgASlug, prod.id, {
+        expected_version: 1,
+        name: "Product With Live Replaced Image",
+        sku: prod.sku,
+        selling_price: 45.0,
+        unit_of_measure: "piece",
+        image_url: replacementPath,
+        cost_operation: "unchanged",
       });
 
-      expect(error).toBeNull();
-      expect((updateRes as any).data.image_url).toBe(newPath);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.version).toBe(2);
+      expect(result.data.image_url).toBe(replacementPath);
 
-      // Verify the new image is recorded in DB
-      const dbCheck = await pgClient.query("SELECT image_url FROM public.products WHERE id = $1;", [prod.id]);
-      expect(dbCheck.rows[0].image_url).toBe(newPath);
+      // 5. Verify database references new object and version incremented
+      const dbCheck = await pgClient.query("SELECT image_url, version FROM public.products WHERE id = $1;", [prod.id]);
+      expect(dbCheck.rows[0].image_url).toBe(replacementPath);
+      expect(dbCheck.rows[0].version).toBe(2);
 
-      // Clean up test storage object
-      await adminClient.storage.from("product-images").remove([newPath]);
+      // 6. Verify previous object was removed from live Storage bucket post-commit
+      const { error: oldObjErr } = await adminClient.storage.from("product-images").download(initialPath);
+      expect(oldObjErr).not.toBeNull();
+
+      // 7. Verify new object still exists in live Storage bucket
+      const { data: newObjCheck } = await adminClient.storage.from("product-images").download(replacementPath);
+      expect(newObjCheck).not.toBeNull();
+
+      // Cleanup
+      await adminClient.storage.from("product-images").remove([replacementPath]);
+    });
+
+    it("rolls back candidate replacement image from Storage when updateProductAction encounters OCC conflict, keeping original image", async () => {
+      const prod = await createTestProduct("SA-IMG-CONFLICT-LIVE");
+      const initialPath = `${orgAId}/${prod.id}/keep-live.png`;
+      const candidatePath = `${orgAId}/${prod.id}/candidate-rollback.png`;
+
+      // 1. Upload initial image and set in DB
+      const dummyPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+      await adminClient.storage
+        .from("product-images")
+        .upload(initialPath, dummyPng, { contentType: "image/png", upsert: true });
+
+      await pgClient.query("UPDATE public.products SET image_url = $1 WHERE id = $2;", [initialPath, prod.id]);
+
+      // 2. Upload candidate replacement image to live Storage
+      await adminClient.storage
+        .from("product-images")
+        .upload(candidatePath, dummyPng, { contentType: "image/png", upsert: true });
+
+      // 3. Establish authenticated owner session
+      clearInMemoryCookieJar();
+      const serverClient = await createServerClient();
+      await serverClient.auth.signInWithPassword({
+        email: ownerEmail,
+        password: testPassword,
+      });
+
+      // 4. Invoke updateProductAction with STALE expected_version (OCC conflict trigger)
+      const result = await updateProductAction(orgASlug, prod.id, {
+        expected_version: 999, // Stale version! (Current version is 1)
+        name: "OCC Stale Attempt",
+        sku: prod.sku,
+        selling_price: 55.0,
+        unit_of_measure: "piece",
+        image_url: candidatePath,
+        cost_operation: "unchanged",
+      });
+
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.code).toBe("CONCURRENCY_CONFLICT");
+
+      // 5. Verify database still references initial image and version is unchanged
+      const dbCheck = await pgClient.query("SELECT image_url, version FROM public.products WHERE id = $1;", [prod.id]);
+      expect(dbCheck.rows[0].image_url).toBe(initialPath);
+      expect(dbCheck.rows[0].version).toBe(1);
+
+      // 6. Verify initial image STILL exists in live Storage bucket
+      const { data: keepCheck } = await adminClient.storage.from("product-images").download(initialPath);
+      expect(keepCheck).not.toBeNull();
+
+      // 7. Verify candidate replacement image was rolled back and deleted from live Storage bucket
+      const { error: candidateErr } = await adminClient.storage.from("product-images").download(candidatePath);
+      expect(candidateErr).not.toBeNull();
+
+      // Cleanup
+      await adminClient.storage.from("product-images").remove([initialPath]);
+    });
+
+    it("preserves DB update success and captures structured [STORAGE_CLEANUP_FAILURE] diagnostic if post-commit removal fails", async () => {
+      const prod = await createTestProduct("SA-IMG-OBSERVE-LIVE");
+      const initialPath = `${orgAId}/${prod.id}/faulty-old.png`;
+      const replacementPath = `${orgAId}/${prod.id}/faulty-new.png`;
+
+      const dummyPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+      await adminClient.storage
+        .from("product-images")
+        .upload(initialPath, dummyPng, { contentType: "image/png", upsert: true });
+
+      await pgClient.query("UPDATE public.products SET image_url = $1 WHERE id = $2;", [initialPath, prod.id]);
+
+      await adminClient.storage
+        .from("product-images")
+        .upload(replacementPath, dummyPng, { contentType: "image/png", upsert: true });
+
+      // Establish authenticated owner session
+      clearInMemoryCookieJar();
+      const serverClient = await createServerClient();
+      await serverClient.auth.signInWithPassword({
+        email: ownerEmail,
+        password: testPassword,
+      });
+
+      // Spy on console.error to verify structured diagnostics
+      const consoleErrorSpy = vi.spyOn(console, "error");
+
+      // Simulate a storage removal API failure on the server storage prototype
+      const serverStorageProto = Object.getPrototypeOf(serverClient.storage.from("product-images"));
+      const removeSpy = vi.spyOn(serverStorageProto, "remove").mockResolvedValueOnce({
+        data: null,
+        error: { name: "StorageApiError", message: "Simulated 503 storage outage" } as any,
+      });
+
+      try {
+        const result = await updateProductAction(orgASlug, prod.id, {
+          expected_version: 1,
+          name: "Faulty Cleanup Handled Gracefully",
+          sku: prod.sku,
+          selling_price: 65.0,
+          unit_of_measure: "piece",
+          image_url: replacementPath,
+          cost_operation: "unchanged",
+        });
+
+        // CRITICAL INVARIANT: DB mutation succeeded, so action must still return success!
+        expect(result.success).toBe(true);
+        if (!result.success) return;
+        expect(result.data.version).toBe(2);
+
+        // Structured diagnostic MUST be logged
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          "[STORAGE_CLEANUP_FAILURE]",
+          expect.objectContaining({
+            operation: "post_commit_superseded_image",
+            organizationId: orgAId,
+            productId: prod.id,
+            storagePath: initialPath,
+            errorCategory: "storage_api_error",
+            error: "Simulated 503 storage outage",
+          })
+        );
+      } finally {
+        removeSpy.mockRestore();
+        consoleErrorSpy.mockRestore();
+        await adminClient.storage.from("product-images").remove([initialPath, replacementPath]);
+      }
     });
   });
 });

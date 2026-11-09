@@ -7,6 +7,7 @@ import { resolveTenantContext } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/auth/permissions";
 import { CreateProductSchema, UpdateProductSchema } from "@/lib/validations/product";
 import { calculateGrossMargin } from "@/lib/products/margin";
+import { removeProductImage } from "@/lib/products/image-storage";
 import type { ActionResult } from "@/types/auth";
 import type { ProductStatus, UnitOfMeasure } from "@/types/product";
 
@@ -423,11 +424,11 @@ export async function updateProductAction(
         input.image_url !== previousImagePath &&
         input.image_url.startsWith(`${context.organization.id}/`)
       ) {
-        try {
-          await supabase.storage.from("product-images").remove([input.image_url]);
-        } catch {
-          // Non-terminating rollback cleanup failure
-        }
+        await removeProductImage(supabase, input.image_url, {
+          operation: "rollback_new_image",
+          organizationId: context.organization.id,
+          productId,
+        });
       }
 
       const mapped = KNOWN_ERROR_CODES[error.code] || {
@@ -445,6 +446,18 @@ export async function updateProductAction(
 
     const rpcPayload = rawRpcData as { success?: boolean; data?: RpcProductData };
     if (!rpcPayload?.success || !rpcPayload?.data) {
+      if (
+        input.image_url &&
+        input.image_url !== previousImagePath &&
+        input.image_url.startsWith(`${context.organization.id}/`)
+      ) {
+        await removeProductImage(supabase, input.image_url, {
+          operation: "rollback_new_image",
+          organizationId: context.organization.id,
+          productId,
+        });
+      }
+
       return {
         success: false,
         error: {
@@ -462,11 +475,11 @@ export async function updateProductAction(
       previousImagePath !== input.image_url &&
       previousImagePath.startsWith(`${context.organization.id}/`)
     ) {
-      try {
-        await supabase.storage.from("product-images").remove([previousImagePath]);
-      } catch {
-        // Log unreferenced path for maintenance orphan cleanup
-      }
+      await removeProductImage(supabase, previousImagePath, {
+        operation: "post_commit_superseded_image",
+        organizationId: context.organization.id,
+        productId,
+      });
     }
 
     const canReadCost = hasPermission(context, "products:read_cost");

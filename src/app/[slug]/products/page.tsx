@@ -9,6 +9,8 @@ import { ProductTable } from "@/components/products/ProductTable";
 import { calculateGrossMargin } from "@/lib/products/margin";
 import type { ProductListItem, ProductSortField, SortOrder } from "@/types/product";
 import { Plus, FolderTree, ChevronLeft, ChevronRight } from "lucide-react";
+import { CategoryModalTrigger } from "@/components/products/CategoryModalTrigger";
+import type { CategoryModalItem } from "@/components/products/CategoryManagerModal";
 
 interface ProductsPageProps {
   params: Promise<{ slug: string }>;
@@ -50,6 +52,9 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
   const canReadCost = hasPermission(context, "products:read_cost");
   const canCreate = hasPermission(context, "products:create");
   const canManageCategories = hasPermission(context, "categories:read");
+  const canCreateCategory = hasPermission(context, "categories:create");
+  const canUpdateCategory = hasPermission(context, "categories:update");
+  const canArchiveCategory = hasPermission(context, "categories:archive");
 
   // 3. Parse and sanitize query parameters
   const rawQ = resolvedParams.q ? resolvedParams.q.trim() : "";
@@ -73,7 +78,7 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
   // 4. Fetch Active Categories for filter dropdown
   const { data: dbCategories } = await supabase
     .from("product_categories")
-    .select("id, name, status")
+    .select("id, name, description, status, created_at, updated_at")
     .eq("organization_id", context.organization.id)
     .order("name", { ascending: true });
 
@@ -82,6 +87,34 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
     name: cat.name,
     status: cat.status as "active" | "archived",
   }));
+
+  // Fetch active product counts per category for the CategoryManagerModal when authorized
+  let categoryModalItems: CategoryModalItem[] = [];
+  if (canManageCategories) {
+    const { data: countRows } = await supabase
+      .from("products")
+      .select("category_id")
+      .eq("organization_id", context.organization.id)
+      .eq("status", "active")
+      .not("category_id", "is", null);
+
+    const counts: Record<string, number> = {};
+    countRows?.forEach((row) => {
+      if (row.category_id) {
+        counts[row.category_id] = (counts[row.category_id] || 0) + 1;
+      }
+    });
+
+    categoryModalItems = (dbCategories || []).map((cat: any) => ({
+      id: cat.id,
+      name: cat.name,
+      description: cat.description ?? null,
+      status: cat.status as "active" | "archived",
+      productCount: counts[cat.id] || 0,
+      createdAt: cat.created_at,
+      updatedAt: cat.updated_at,
+    }));
+  }
 
   // 5. Construct Product Query with Cost Confidentiality Enforcement (FR-039)
   // When caller lacks products:read_cost, product_costs is NOT joined or queried at all.
@@ -260,13 +293,22 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
 
         <div className="flex flex-wrap items-center gap-2">
           {canManageCategories && (
-            <Link
-              href={`/${slug}/products/categories`}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
-            >
-              <FolderTree className="h-4 w-4" aria-hidden="true" />
-              <span>Categories</span>
-            </Link>
+            <>
+              <CategoryModalTrigger
+                slug={slug}
+                categories={categoryModalItems}
+                canCreate={canCreateCategory}
+                canUpdate={canUpdateCategory}
+                canArchive={canArchiveCategory}
+              />
+              <Link
+                href={`/${slug}/products/categories`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
+              >
+                <FolderTree className="h-4 w-4" aria-hidden="true" />
+                <span>Categories</span>
+              </Link>
+            </>
           )}
 
           {canCreate && (

@@ -15,6 +15,15 @@ import type { Product, UnitOfMeasure } from "@/types/product";
 import { ALLOWED_UOM } from "@/types/product";
 import { updateProductAction } from "@/actions/product-actions";
 import { ConcurrencyConflictModal } from "@/components/products/ConcurrencyConflictModal";
+import {
+  ProductImageUploader,
+  type ProductImageValue,
+} from "@/components/products/ProductImageUploader";
+import { createClient } from "@/lib/supabase/client";
+import {
+  uploadProductImage,
+  removeProductImage,
+} from "@/lib/products/image-storage";
 
 export interface CategorySelectOption {
   id: string;
@@ -57,7 +66,16 @@ export function ProductEditForm({
   const [categoryId, setCategoryId] = useState(product.categoryId || "");
   const [unitOfMeasure, setUnitOfMeasure] = useState<UnitOfMeasure>(product.unitOfMeasure);
   const [sellingPrice, setSellingPrice] = useState(product.sellingPrice.toString());
-  const [imageUrl, setImageUrl] = useState(product.imageUrl || "");
+  // Media / Image state initialized from product
+  const [imageState, setImageState] = useState<ProductImageValue>(() => {
+    if (!product.imageUrl) {
+      return { file: null, url: null, source: "none" };
+    }
+    if (product.imageUrl.startsWith("https://")) {
+      return { file: null, url: product.imageUrl, source: "url" };
+    }
+    return { file: null, url: null, source: "file" };
+  });
 
   // Cost management state
   const [costOperation, setCostOperation] = useState<"unchanged" | "set" | "clear">("unchanged");
@@ -92,22 +110,68 @@ export function ProductEditForm({
     }
 
     startTransition(async () => {
-      const result = await updateProductAction(slug, product.id, {
-        expected_version: product.version,
-        name: name.trim(),
-        description: description.trim() ? description.trim() : null,
-        sku: sku.trim().toUpperCase(),
-        barcode: barcode.trim() ? barcode.trim() : null,
-        category_id: categoryId ? categoryId : null,
-        unit_of_measure: unitOfMeasure,
-        selling_price: parsedSellingPrice,
-        cost_operation: costOperation,
-        cost_price: parsedCostPrice,
-        image_url: imageUrl.trim() ? imageUrl.trim() : null,
-      });
+      let finalImageUrl: string | null = product.imageUrl ?? null;
+      let newlyUploadedStoragePath: string | null = null;
+      const supabase = createClient();
+
+      // If user selected a new binary file to replace/set product image
+      if (imageState.source === "file" && imageState.file) {
+        const uploadRes = await uploadProductImage(
+          supabase,
+          product.organizationId,
+          product.id,
+          imageState.file
+        );
+
+        if (!uploadRes.success) {
+          setErrorMessage(`Failed to upload product image: ${uploadRes.error}`);
+          return;
+        }
+
+        finalImageUrl = uploadRes.path;
+        newlyUploadedStoragePath = uploadRes.path;
+      } else if (imageState.source === "url" && imageState.url) {
+        finalImageUrl = imageState.url.trim();
+      } else if (imageState.source === "none") {
+        finalImageUrl = null;
+      }
+
+      let result;
+      try {
+        result = await updateProductAction(slug, product.id, {
+          expected_version: product.version,
+          name: name.trim(),
+          description: description.trim() ? description.trim() : null,
+          sku: sku.trim().toUpperCase(),
+          barcode: barcode.trim() ? barcode.trim() : null,
+          category_id: categoryId ? categoryId : null,
+          unit_of_measure: unitOfMeasure,
+          selling_price: parsedSellingPrice,
+          cost_operation: costOperation,
+          cost_price: parsedCostPrice,
+          image_url: finalImageUrl,
+        });
+      } catch (actionErr) {
+        // Fallback rollback cleanup only if server action invocation crashed unexpectedly
+        if (newlyUploadedStoragePath) {
+          await removeProductImage(supabase, newlyUploadedStoragePath, {
+            operation: "rollback_new_image",
+            organizationId: product.organizationId,
+            productId: product.id,
+          });
+        }
+        setErrorMessage(actionErr instanceof Error ? actionErr.message : "Failed to update product.");
+        return;
+      }
 
       if (!result.success) {
-        if (result.error?.code === "P0010" || result.error?.code === "STALE_UPDATE_CONFLICT") {
+        // Server action updateProductAction already authoritatively rolled back newlyUploadedStoragePath.
+        // Avoid duplicate client-side deletion.
+        if (
+          result.error?.code === "P0010" ||
+          result.error?.code === "CONCURRENCY_CONFLICT" ||
+          result.error?.code === "STALE_UPDATE_CONFLICT"
+        ) {
           setIsConflictOpen(true);
           setConflictVersion(product.version + 1);
         } else {
@@ -366,29 +430,23 @@ export function ProductEditForm({
           </div>
         </div>
 
-        {/* Media / Image URL */}
+        {/* Media / Product Image Uploader (T031, T042, FR-011, FR-042) */}
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm space-y-4">
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <Package className="h-4 w-4 text-zinc-500" />
             Product Media
           </h2>
 
-          <div>
-            <label htmlFor="imageUrl" className="block text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300 mb-1">
-              Image URL / Storage Path
-            </label>
-            <input
-              id="imageUrl"
-              type="text"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://example.com/image.png or tenant storage path"
-              className="w-full px-3.5 py-2 text-sm font-mono rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-            />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-              Supports external HTTPS image URLs or internal Storage paths belonging to this product.
-            </p>
-          </div>
+          <ProductImageUploader
+            mode="edit"
+            slug={slug}
+            organizationId={product.organizationId}
+            productId={product.id}
+            initialImageUrl={product.imageUrl}
+            value={imageState}
+            onChange={setImageState}
+            disabled={isPending}
+          />
         </div>
 
         {/* Form Action Controls */}
