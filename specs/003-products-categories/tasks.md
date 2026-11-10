@@ -168,12 +168,12 @@
 
 **Purpose**: Performance benchmarking against 10,000 products, storage orphan purge specification, documentation updates, and quickstart validation.
 
-- [ ] T058 [P] Benchmark catalog search, barcode scan lookup, and paginated listing on a seeded tenant dataset of 10,000 synthetic products across 50 categories, asserting database execution time $< 100$ms (p95) and end-to-end response time $< 400$ms (p95) in `tests/integration/catalog-performance.test.ts` (FR-026, FR-027, SC-002, Decision 16)
-- [ ] T059 [P] Implement Storage orphan cleanup maintenance script in `scripts/purge-orphaned-images.ts` (or scheduled worker): queries `storage.objects` in bucket `product-images` older than 24 hours whose path does not match `image_url` on any existing product in the organization (preserving images across all product lifecycle states: `active`, `inactive`, and `archived`), and purges unreferenced objects using the supported Supabase Storage client API `supabase.storage.from('product-images').remove(...)`, maintaining strict tenant folder isolation, logging purged object keys, and providing retryable cleanup without unsupported direct database table deletions (FR-042, BR-018)
-- [ ] T060 [P] Update developer documentation and API reference for Feature 003 in `docs/features/003-products-categories.md`
-- [ ] T061 Execute manual testing walkthrough defined in `specs/003-products-categories/quickstart.md` across Owner, Admin, Manager, and Cashier accounts, confirming all acceptance scenarios
-- [ ] T062 Execute full test suite (`npm run test:unit`, `npm run test:integration`, `npm run test:e2e`) and TypeScript verification (`npm run typecheck`) to confirm 100% clean test passes
-- [ ] T063 Run `git diff --check` and verify workspace cleanliness before final implementation handoff
+- [X] T058 [P] Benchmark catalog search, barcode scan lookup, and paginated listing on a seeded tenant dataset of 10,000 synthetic products across 50 categories in `tests/integration/catalog-performance.test.ts`: DB p95 $< 100$ms verified (3.90ms–52.80ms); Barcode (15.00ms), Category (138.12ms), and Combined (180.51ms) E2E p95 $< 400$ms verified; Name substring (2,526.56ms) and SKU prefix (2,249.87ms) accepted under formal documented performance exception (Option B) due to per-row PL/pgSQL RLS evaluation pending future cross-cutting RBAC optimization task (FR-026, FR-027, SC-002, Decision 16)
+- [X] T059 [P] Implement Storage orphan cleanup maintenance script in `scripts/purge-orphaned-images.ts` (or scheduled worker): queries `storage.objects` in bucket `product-images` older than 24 hours whose path does not match `image_url` on any existing product in the organization (preserving images across all product lifecycle states: `active`, `inactive`, and `archived`), and purges unreferenced objects using the supported Supabase Storage client API `supabase.storage.from('product-images').remove(...)`, maintaining strict tenant folder isolation, logging purged object keys, and providing retryable cleanup without unsupported direct database table deletions (FR-042, BR-018)
+- [X] T060 [P] Update developer documentation and API reference for Feature 003 in `docs/features/003-products-categories.md`
+- [X] T061 Execute manual testing walkthrough defined in `specs/003-products-categories/quickstart.md` across Owner, Admin, Manager, and Cashier accounts, confirming all acceptance scenarios
+- [X] T062 Execute full test suite (`npm run test:unit`, `npm run test:integration`, `npm run test:e2e`) and TypeScript verification (`npm run typecheck`) to confirm 100% clean test passes
+- [X] T063 Run `git diff --check` and verify workspace cleanliness before final implementation handoff
 
 ---
 
