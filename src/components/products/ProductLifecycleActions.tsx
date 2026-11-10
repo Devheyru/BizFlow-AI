@@ -581,7 +581,13 @@ export function ProductLifecycleActions({
           onKeyDown={(e) => handleDialogKeyDown(e, true)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
         >
-          <div className="relative w-full max-w-lg p-6 bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+          <div
+            className={`relative w-full p-6 bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 ${
+              variant === "table"
+                ? "max-w-[calc(100vw-2rem)] sm:max-w-lg min-w-0 whitespace-normal text-left break-words"
+                : "max-w-lg"
+            }`}
+          >
             <button
               type="button"
               onClick={closeArchiveModal}
@@ -593,18 +599,18 @@ export function ProductLifecycleActions({
             </button>
 
             {/* Header */}
-            <div className="flex items-start gap-4">
+            <div className={`flex items-start gap-4 ${variant === "table" ? "min-w-0 max-w-full" : ""}`}>
               <div className="p-3 bg-amber-100 dark:bg-amber-950/60 rounded-full text-amber-600 dark:text-amber-400 shrink-0">
                 <AlertTriangle className="h-6 w-6" />
               </div>
-              <div className="space-y-1">
+              <div className={`space-y-1 ${variant === "table" ? "min-w-0 flex-1 break-words" : ""}`}>
                 <h3
                   id="archive-dialog-title"
                   className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
                 >
                   Archive Product
                 </h3>
-                <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                <p className={`text-sm font-medium text-zinc-600 dark:text-zinc-300 ${variant === "table" ? "break-words" : ""}`}>
                   {productName} {sku ? `(SKU: ${sku})` : ""}
                 </p>
               </div>
@@ -613,20 +619,26 @@ export function ProductLifecycleActions({
             {/* Description & Identifier Reservation Warning */}
             <div
               id="archive-dialog-description"
-              className="text-sm text-zinc-600 dark:text-zinc-300 space-y-3"
+              className={`text-sm text-zinc-600 dark:text-zinc-300 space-y-3 ${
+                variant === "table" ? "min-w-0 max-w-full whitespace-normal break-words" : ""
+              }`}
             >
-              <p>
+              <p className={variant === "table" ? "break-words" : ""}>
                 Are you sure you want to archive this product? It will be hidden from
                 active catalog listings, inventory lookups, and retail operations.
               </p>
 
               {/* Permanent Reservation Notice (FR-021) */}
-              <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-900/60 text-xs text-amber-800 dark:text-amber-300 space-y-1.5">
+              <div
+                className={`p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-900/60 text-xs text-amber-800 dark:text-amber-300 space-y-1.5 ${
+                  variant === "table" ? "min-w-0 max-w-full whitespace-normal break-words" : ""
+                }`}
+              >
                 <p className="font-semibold flex items-center gap-1.5">
                   <Archive className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   <span>Permanent Identifier Reservation</span>
                 </p>
-                <p>
+                <p className={variant === "table" ? "break-words whitespace-normal" : ""}>
                   Archiving permanently retains the SKU {sku ? `("${sku}")` : ""} and barcode
                   reservations for this product. These identifiers <strong>cannot be reused</strong>{" "}
                   by any new or existing product within this organization to preserve historical transaction
@@ -634,19 +646,26 @@ export function ProductLifecycleActions({
                 </p>
               </div>
 
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className={`text-xs text-zinc-500 dark:text-zinc-400 ${variant === "table" ? "break-words" : ""}`}>
                 You can restore this product at any time in the future from the archived catalog view.
               </p>
             </div>
 
             {/* Dialog Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+            <div
+              className={`flex items-center justify-end gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800 ${
+                variant === "table"
+                  ? "flex-col-reverse sm:flex-row items-stretch sm:items-center min-w-0 max-w-full"
+                  : ""
+              }`}
+            >
               <Button
                 ref={archiveCancelRef}
                 type="button"
                 variant="outline"
                 onClick={closeArchiveModal}
                 disabled={isPending}
+                className={variant === "table" ? "w-full sm:w-auto" : ""}
               >
                 Cancel
               </Button>
@@ -654,7 +673,9 @@ export function ProductLifecycleActions({
                 type="button"
                 onClick={handleConfirmArchive}
                 disabled={isPending}
-                className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-700"
+                className={`bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-700 ${
+                  variant === "table" ? "w-full sm:w-auto" : ""
+                }`}
               >
                 {isPending && (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />

@@ -701,5 +701,85 @@ describe("T051 & T052: ProductLifecycleActions Component Unit Tests (US5)", () =
       expect(screen.getByRole("switch", { name: new RegExp(`toggle ${mockProductName} status`, "i") })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: new RegExp(`archive ${mockProductName}`, "i") })).toBeInTheDocument();
     });
+
+    it("archive dialog in table mode applies anti-overflow, wrapping, and responsive classes", () => {
+      const longName = "Super Long Artisanal Organic Cold Pressed Extra Virgin Olive Oil Reserve 1000ml Bottle With Special Seal";
+      const longSku = "SKU-VERY-LONG-ALPHANUMERIC-IDENTIFIER-RESERVED-9999999999";
+
+      render(
+        <ProductLifecycleActions
+          slug={mockSlug}
+          productId={mockProductId}
+          productName={longName}
+          sku={longSku}
+          initialStatus="active"
+          initialVersion={1}
+          canUpdate={true}
+          canArchive={true}
+          variant="table"
+        />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`archive ${longName}`, "i") }));
+
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toBeInTheDocument();
+
+      // Modal container has anti-overflow, text-left, and whitespace-normal overrides
+      const modalBox = dialog.querySelector("div.relative");
+      expect(modalBox).not.toBeNull();
+      expect(modalBox?.className).toContain("whitespace-normal");
+      expect(modalBox?.className).toContain("text-left");
+      expect(modalBox?.className).toContain("min-w-0");
+      expect(modalBox?.className).toContain("break-words");
+      expect(modalBox?.className).toContain("max-w-[calc(100vw-2rem)]");
+      expect(modalBox?.className).toContain("sm:max-w-lg");
+
+      // Warning box contains whitespace-normal, min-w-0, and break-words
+      const warningTitle = screen.getByText("Permanent Identifier Reservation");
+      const warningBox = warningTitle.closest(".bg-amber-50");
+      expect(warningBox).not.toBeNull();
+      expect(warningBox?.className).toContain("min-w-0");
+      expect(warningBox?.className).toContain("max-w-full");
+      expect(warningBox?.className).toContain("whitespace-normal");
+      expect(warningBox?.className).toContain("break-words");
+
+      // Button container has responsive stacking classes
+      const cancelBtn = screen.getByRole("button", { name: /cancel/i });
+      const btnContainer = cancelBtn.parentElement;
+      expect(btnContainer?.className).toContain("flex-col-reverse");
+      expect(btnContainer?.className).toContain("sm:flex-row");
+    });
+
+    it("archive dialog in detail mode preserves original non-table modal layout classes", () => {
+      render(
+        <ProductLifecycleActions
+          slug={mockSlug}
+          productId={mockProductId}
+          productName={mockProductName}
+          sku={mockSku}
+          initialStatus="active"
+          initialVersion={1}
+          canUpdate={true}
+          canArchive={true}
+          variant="detail"
+        />
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /archive/i }));
+
+      const dialog = screen.getByRole("dialog");
+      const modalBox = dialog.querySelector("div.relative");
+      expect(modalBox).not.toBeNull();
+
+      // In detail mode, specific table overrides are NOT present
+      expect(modalBox?.className).toContain("max-w-lg");
+      expect(modalBox?.className).not.toContain("max-w-[calc(100vw-2rem)]");
+      expect(modalBox?.className).not.toContain("whitespace-normal");
+
+      const cancelBtn = screen.getByRole("button", { name: /cancel/i });
+      const btnContainer = cancelBtn.parentElement;
+      expect(btnContainer?.className).not.toContain("flex-col-reverse");
+    });
   });
 });

@@ -222,12 +222,71 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
   const totalCount = count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
+  // Batch resolve signed URLs for private Supabase Storage objects (FR-042, BR-018)
+  // Dual-protocol: External HTTPS URLs are rendered directly; internal Storage paths are signed
+  const signedUrlsMap = new Map<string, string>();
+  const internalImagePaths = (dbProducts || [])
+    .map((row: any) => row.image_url)
+    .filter(
+      (url: any): url is string =>
+        typeof url === "string" &&
+        url.length > 0 &&
+        !url.startsWith("https://") &&
+        url.startsWith(`${context.organization.id}/`)
+    );
+
+  if (internalImagePaths.length > 0) {
+    try {
+      const { data: signedResults, error: signError } = await supabase.storage
+        .from("product-images")
+        .createSignedUrls(internalImagePaths, 3600);
+
+      if (!signError && signedResults) {
+        for (const item of signedResults) {
+          if (item.signedUrl && item.path) {
+            signedUrlsMap.set(item.path, item.signedUrl);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Batch signing failed, attempting fallback:", err);
+    }
+
+    // Fallback signing for individual paths if batch signing returned partial or failed
+    const missingPaths = internalImagePaths.filter((path) => !signedUrlsMap.has(path));
+    if (missingPaths.length > 0) {
+      await Promise.all(
+        missingPaths.map(async (path) => {
+          try {
+            const { data } = await supabase.storage
+              .from("product-images")
+              .createSignedUrl(path, 3600);
+            if (data?.signedUrl) {
+              signedUrlsMap.set(path, data.signedUrl);
+            }
+          } catch {
+            // Silently continue
+          }
+        })
+      );
+    }
+  }
+
   // Process rows into strongly typed ProductListItem models
   const products: ProductListItem[] = (dbProducts || []).map((row: any) => {
     const categoryRel = Array.isArray(row.category) ? row.category[0] : row.category;
     let categoryName: string | null = null;
     if (categoryRel) {
       categoryName = categoryRel.name + (categoryRel.status === "archived" ? " [Archived]" : "");
+    }
+
+    let signedImageUrl: string | null = null;
+    if (row.image_url) {
+      if (row.image_url.startsWith("https://")) {
+        signedImageUrl = row.image_url;
+      } else if (signedUrlsMap.has(row.image_url)) {
+        signedImageUrl = signedUrlsMap.get(row.image_url) || null;
+      }
     }
 
     const item: ProductListItem = {
@@ -242,6 +301,7 @@ export default async function ProductsPage({ params, searchParams }: ProductsPag
       sellingPrice: Number(row.selling_price),
       unitOfMeasure: row.unit_of_measure,
       imageUrl: row.image_url,
+      signedImageUrl,
       status: row.status,
       version: row.version,
       createdAt: row.created_at,

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { ProductListItem, ProductSortField, SortOrder } from "@/types/product";
 import { formatCurrency, formatGrossMargin } from "@/lib/products/margin";
+import { getSignedProductImageUrlAction } from "@/actions/product-actions";
 import { ProductLifecycleActions } from "./ProductLifecycleActions";
 
 export interface ProductTableProps {
@@ -26,6 +27,83 @@ export interface ProductTableProps {
   sortOrder?: SortOrder;
   slug: string;
   hasActiveFilters?: boolean;
+}
+
+export interface ProductThumbnailProps {
+  product: ProductListItem;
+  slug: string;
+}
+
+/**
+ * ProductThumbnail (T025, FR-026, FR-042)
+ *
+ * Renders thumbnail image with dual-protocol resolution:
+ * - Uses server-pre-signed URL or external HTTPS URL immediately
+ * - Falls back to client-side signing for relative Storage paths if pre-signing was absent
+ * - Gracefully falls back to the Package placeholder icon if loading fails or no image exists
+ */
+export function ProductThumbnail({ product, slug }: ProductThumbnailProps) {
+  const [hasError, setHasError] = React.useState(false);
+  const [clientSignedUrl, setClientSignedUrl] = React.useState<string | null>(null);
+
+  // Initial display URL: Use pre-signed URL from server, or direct external HTTPS URL
+  const initialDisplayUrl =
+    product.signedImageUrl ||
+    (product.imageUrl?.startsWith("https://") ? product.imageUrl : null);
+
+  // Client-side dynamic signing fallback:
+  // If product has an internal storage path but signedImageUrl was not pre-signed
+  React.useEffect(() => {
+    let isMounted = true;
+    if (
+      !initialDisplayUrl &&
+      product.imageUrl &&
+      !product.imageUrl.startsWith("https://")
+    ) {
+      getSignedProductImageUrlAction(slug, product.imageUrl)
+        .then((res) => {
+          if (isMounted && res.success && res.data?.signedUrl) {
+            setClientSignedUrl(res.data.signedUrl);
+          }
+        })
+        .catch(() => {
+          // Graceful fallback to Package placeholder icon
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [initialDisplayUrl, product.imageUrl, slug]);
+
+  const displayUrl = initialDisplayUrl || clientSignedUrl;
+
+  // Genuine no-image state, or image failed to load -> show intended Package placeholder icon
+  if (!displayUrl || hasError) {
+    return (
+      <div
+        className="h-10 w-10 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden"
+        data-testid={`product-thumbnail-placeholder-${product.id}`}
+      >
+        <Package className="h-5 w-5 text-gray-400" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="h-10 w-10 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden"
+      data-testid={`product-thumbnail-image-${product.id}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={displayUrl}
+        alt={product.name}
+        className="h-full w-full object-cover"
+        loading="lazy"
+        onError={() => setHasError(true)}
+      />
+    </div>
+  );
 }
 
 /**
@@ -205,19 +283,7 @@ export function ProductTable({
                 {/* Product Name & Thumbnail */}
                 <td className="py-3.5 pl-4 pr-3 sm:pl-6">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden">
-                      {product.imageUrl ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <Package className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                      )}
-                    </div>
+                    <ProductThumbnail product={product} slug={slug} />
                     <div className="min-w-0">
                       <Link
                         href={`/${slug}/products/${product.id}`}
