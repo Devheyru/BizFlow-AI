@@ -400,15 +400,11 @@ export async function getInventoryListAction(
       items = items.filter((it) => it.stockStatus === query.stockStatus);
     }
 
-    // Deterministic Sorting
+    // Deterministic Sorting with Stable Tie-Breakers (P4-R03)
     items.sort((a, b) => {
       let cmp = 0;
       if (query.sortBy === "stock_status") {
         cmp = getStockStatusPriority(a.stockStatus) - getStockStatusPriority(b.stockStatus);
-        // Tie-breaker by name
-        if (cmp === 0) {
-          cmp = a.productName.localeCompare(b.productName);
-        }
       } else if (query.sortBy === "name") {
         cmp = a.productName.localeCompare(b.productName);
       } else if (query.sortBy === "sku") {
@@ -416,7 +412,23 @@ export async function getInventoryListAction(
       } else if (query.sortBy === "quantity") {
         cmp = a.quantity - b.quantity;
       }
-      return query.sortOrder === "desc" ? -cmp : cmp;
+
+      // Apply primary sort direction
+      if (query.sortOrder === "desc") {
+        cmp = -cmp;
+      }
+
+      // Secondary stable tie-breaker by product name (if not already primary)
+      if (cmp === 0 && query.sortBy !== "name") {
+        cmp = a.productName.localeCompare(b.productName);
+      }
+
+      // Tertiary stable tie-breaker by product ID to guarantee 100% determinism across pages
+      if (cmp === 0) {
+        cmp = a.productId.localeCompare(b.productId);
+      }
+
+      return cmp;
     });
 
     // Pagination

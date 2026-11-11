@@ -70,11 +70,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Create `src/app/[slug]/inventory/page.tsx` (RSC layout; calls `getInventoryOverviewAction` and `getInventoryListAction`; composes metric tiles + filter bar + inventory table; resolves combined valuation permission server-side — passes `canViewValuation` boolean prop (true only when caller holds BOTH `inventory:read_valuation` AND `products:read_cost`) to metric tiles; UI visibility derives from server-computed flag, not from client-side permission checks)
-- [ ] T019 [P] [US1] Create `src/app/[slug]/inventory/loading.tsx` (skeleton states for metric tiles and table rows)
-- [ ] T020 [P] [US1] Create `src/components/inventory/inventory-metrics-tiles.tsx` (4 metric cards: Total Products, In-Stock count, Low-Stock count, Out-of-Stock count; conditionally renders Total Valuation tile only when `canViewValuation` prop is true — this prop is a server-computed boolean requiring BOTH `inventory:read_valuation` AND `products:read_cost`; component never re-evaluates permissions independently; uses `recharts` sparkline for valuation trend)
-- [ ] T021 [P] [US1] Create `src/components/inventory/inventory-filters.tsx` (search input, category dropdown, stock status dropdown, lifecycle status dropdown, `Include Archived` toggle; emits filter state via URL search params)
-- [ ] T022 [US1] Create `src/components/inventory/inventory-table.tsx` (paginated, sortable inventory table; stock status badges `In Stock` / `Low Stock` / `Out of Stock` / `[Archived]`; deterministic priority sort: `out_of_stock=1`, `low_stock=2`, `in_stock=3`; reorder alert row highlight; action column for mutation triggers)
+- [X] T018 [US1] Create `src/app/[slug]/inventory/page.tsx` (RSC layout; calls `getInventoryOverviewAction` and `getInventoryListAction`; composes metric tiles + filter bar + inventory table; resolves combined valuation permission server-side — passes `canViewValuation` boolean prop (true only when caller holds BOTH `inventory:read_valuation` AND `products:read_cost`) to metric tiles; UI visibility derives from server-computed flag, not from client-side permission checks)
+- [X] T019 [P] [US1] Create `src/app/[slug]/inventory/loading.tsx` (skeleton states for metric tiles and table rows)
+- [X] T020 [P] [US1] Create `src/components/inventory/inventory-metrics-tiles.tsx` (4 metric cards: Total Products, In-Stock count, Low-Stock count, Out-of-Stock count; conditionally renders Total Valuation tile only when `canViewValuation` prop is true — this prop is a server-computed boolean requiring BOTH `inventory:read_valuation` AND `products:read_cost`; component never re-evaluates permissions independently; uses `recharts` sparkline for valuation trend)
+- [X] T021 [P] [US1] Create `src/components/inventory/inventory-filters.tsx` (search input, category dropdown, stock status dropdown, lifecycle status dropdown, `Include Archived` toggle; emits filter state via URL search params)
+- [X] T022 [US1] Create `src/components/inventory/inventory-table.tsx` (paginated, sortable inventory table; stock status badges `In Stock` / `Low Stock` / `Out of Stock` / `[Archived]`; deterministic priority sort: `out_of_stock=1`, `low_stock=2`, `in_stock=3`; reorder alert row highlight; action column for mutation triggers)
 
 **Checkpoint**: US1 fully functional. Inventory overview is independently verifiable.
 
