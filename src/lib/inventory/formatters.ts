@@ -1,6 +1,22 @@
 import type { StockStatus } from "@/types/inventory";
 
 /**
+ * Authoritative set of discrete Unit of Measure (UOM) values.
+ * Discrete units require whole-integer quantities across all inventory operations.
+ */
+export const DISCRETE_UOMS = Object.freeze(
+  new Set(["piece", "unit", "box", "pack", "pair", "set"])
+);
+
+/**
+ * Determines whether a unit of measure is discrete (whole-integer only).
+ */
+export function isDiscreteUom(uom: string | null | undefined): boolean {
+  if (!uom) return false;
+  return DISCRETE_UOMS.has(uom.toLowerCase().trim());
+}
+
+/**
  * Normalizes and formats a stock quantity:
  * - If discrete (e.g. piece, box, pair, pack), formats as an integer with thousand separators.
  * - If continuous (e.g. kg, liter, meter), formats with trailing decimal places up to 4 scale.

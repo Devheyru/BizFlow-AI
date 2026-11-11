@@ -38,6 +38,7 @@ describe("Audit D: Real Database Integration Verification (127.0.0.1:54322)", ()
 
   let productAId: string;
   let productBId: string;
+  let productContinuousId: string;
 
   beforeAll(async () => {
     pgClient = new PgClient({ connectionString: dbUrl });
@@ -137,6 +138,17 @@ describe("Audit D: Real Database Integration Verification (127.0.0.1:54322)", ()
     });
     if (resProdB.error) throw new Error(`Failed to create product B: ${resProdB.error.message}`);
     productBId = (resProdB.data as any).data.id;
+
+    const resProdCont = await ownerClient.rpc("create_product", {
+      p_org_id: orgIdA,
+      p_name: "Audit Continuous Product",
+      p_sku: `AUDIT-CONT-${Date.now()}`,
+      p_selling_price: 15.0,
+      p_unit_of_measure: "kg",
+      p_cost_price: 5.0,
+    });
+    if (resProdCont.error) throw new Error(`Failed to create continuous product: ${resProdCont.error.message}`);
+    productContinuousId = (resProdCont.data as any).data.id;
   });
 
   afterAll(async () => {
@@ -418,6 +430,119 @@ describe("Audit D: Real Database Integration Verification (127.0.0.1:54322)", ()
     expect(cashError).toBeNull();
     // Supabase RLS silently filters out unauthorized rows
     expect(cashCosts).toEqual([]);
+  });
+
+  // 10. Database-Level Discrete UOM Fractional Rejection (P0015) — Verification B
+  it("rejects fractional quantity on discrete product (piece) at database RPC boundary with P0015", async () => {
+    const fracRes = await ownerClient.rpc("execute_stock_movement", {
+      p_org_id: orgIdA,
+      p_product_id: productAId, // unit_of_measure = 'piece' (discrete)
+      p_movement_type: "restock",
+      p_quantity: 3.5, // Fractional quantity violates P0015
+      p_reason: "Direct RPC call attempting fractional restock on discrete product",
+      p_idempotency_key: "00000000-0000-4000-8000-000000000010",
+      p_quantity_semantics: "quantity_delta",
+    });
+
+    expect(fracRes.error).not.toBeNull();
+    expect(fracRes.error?.code).toBe("P0015");
+    expect(fracRes.error?.message).toMatch(/INTEGER_QUANTITY_REQUIRED/i);
+  });
+
+  // 11. Database-Level Discrete UOM Whole Integer Acceptance — Verification B
+  it("accepts whole integer quantity on discrete product (piece) at database RPC boundary", async () => {
+    const intRes = await ownerClient.rpc("execute_stock_movement", {
+      p_org_id: orgIdA,
+      p_product_id: productAId, // unit_of_measure = 'piece' (discrete)
+      p_movement_type: "restock",
+      p_quantity: 4, // Whole integer
+      p_reason: "Direct RPC call with integer quantity",
+      p_idempotency_key: "00000000-0000-4000-8000-000000000011",
+      p_quantity_semantics: "quantity_delta",
+    });
+
+    expect(intRes.error).toBeNull();
+    const data = intRes.data as any;
+    expect(data.success).toBe(true);
+    expect(parseFloat(data.quantity_delta)).toBe(4);
+  });
+
+  // 12. Database-Level Continuous UOM Decimal Precision Acceptance — Verification B
+  it("accepts valid decimal quantity (up to 4 decimal places) on continuous product (kg)", async () => {
+    const contRes = await ownerClient.rpc("execute_stock_movement", {
+      p_org_id: orgIdA,
+      p_product_id: productContinuousId, // unit_of_measure = 'kg' (continuous)
+      p_movement_type: "initial",
+      p_quantity: 12.3456, // 4 decimal places
+      p_reason: "Initial bulk grain receipt",
+      p_idempotency_key: "00000000-0000-4000-8000-000000000012",
+      p_quantity_semantics: "quantity_delta",
+    });
+
+    expect(contRes.error).toBeNull();
+    const data = contRes.data as any;
+    expect(data.success).toBe(true);
+    expect(parseFloat(data.quantity_delta)).toBe(12.3456);
+  });
+
+  // 13. Database-Level Decimal Precision Exceeded Rejection (P0016) — Verification B
+  it("rejects quantity with more than 4 decimal places at database RPC boundary with P0016", async () => {
+    const precRes = await ownerClient.rpc("execute_stock_movement", {
+      p_org_id: orgIdA,
+      p_product_id: productContinuousId, // unit_of_measure = 'kg'
+      p_movement_type: "restock",
+      p_quantity: 5.12345, // 5 decimal places violates P0016
+      p_reason: "Excessive decimal precision attempt",
+      p_idempotency_key: "00000000-0000-4000-8000-000000000013",
+      p_quantity_semantics: "quantity_delta",
+    });
+
+    expect(precRes.error).not.toBeNull();
+    expect(precRes.error?.code).toBe("P0016");
+    expect(precRes.error?.message).toMatch(/DECIMAL_PRECISION_EXCEEDED/i);
+  });
+
+  // 14. Direct RPC Optimistic Concurrency Control via expectedVersion (P0027) — Verification D
+  it("enforces expectedVersion contract on execute_stock_movement: rejects stale version (P0027) and succeeds on match", async () => {
+    // 1. Fetch current version for continuous product
+    const invRes = await pgClient.query(
+      `SELECT version FROM public.inventory WHERE organization_id = $1 AND product_id = $2;`,
+      [orgIdA, productContinuousId]
+    );
+    const currentVersion = invRes.rows[0].version;
+
+    // 2. Attempt mutation with stale expected_version -> P0027
+    const staleRes = await ownerClient.rpc("execute_stock_movement", {
+      p_org_id: orgIdA,
+      p_product_id: productContinuousId,
+      p_movement_type: "restock",
+      p_quantity: 1.0,
+      p_reason: "Stale OCC restock attempt",
+      p_expected_version: currentVersion - 1, // Stale version!
+      p_idempotency_key: "00000000-0000-4000-8000-000000000014",
+      p_quantity_semantics: "quantity_delta",
+    });
+
+    expect(staleRes.error).not.toBeNull();
+    expect(staleRes.error?.code).toBe("P0027");
+    expect(staleRes.error?.message).toMatch(/STALE_VERSION_CONFLICT/i);
+
+    // 3. Attempt mutation with matching expected_version -> Success
+    const validRes = await ownerClient.rpc("execute_stock_movement", {
+      p_org_id: orgIdA,
+      p_product_id: productContinuousId,
+      p_movement_type: "restock",
+      p_quantity: 1.0,
+      p_reason: "Matching OCC restock",
+      p_expected_version: currentVersion, // Exact match
+      p_idempotency_key: "00000000-0000-4000-8000-000000000015",
+      p_quantity_semantics: "quantity_delta",
+    });
+
+    expect(validRes.error).toBeNull();
+    const data = validRes.data as any;
+    expect(data.success).toBe(true);
+    expect(data.version).toBe(currentVersion + 1);
   });
 });
 

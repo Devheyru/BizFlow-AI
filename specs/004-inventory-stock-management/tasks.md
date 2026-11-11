@@ -88,8 +88,8 @@
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Create `src/components/inventory/restock-modal.tsx` (react-hook-form + `stockMovementInputSchema` for `restock` movement type; quantity field with UOM integer enforcement; supplier reference and reason fields; calls `recordStockMovementAction`; toast confirmation on success; blocks on `PRODUCT_INACTIVE_RESTOCK_BLOCKED` / `PRODUCT_ARCHIVED_STOCK_FORBIDDEN` server errors; requires `inventory:receive` permission)
-- [ ] T024 [US2] Wire `restock-modal` trigger button into `inventory-table.tsx` action column (visible only when `inventory:receive` permission present; passes `productId`, `currentVersion`, `currentStock`, `uomClass` props)
+- [X] T023 [US2] Create `src/components/inventory/restock-modal.tsx` (react-hook-form + `stockMovementInputSchema` for `restock` movement type; quantity field with UOM integer enforcement; supplier reference and reason fields; calls `recordStockMovementAction`; toast confirmation on success; blocks on `PRODUCT_INACTIVE_RESTOCK_BLOCKED` / `PRODUCT_ARCHIVED_STOCK_FORBIDDEN` server errors; requires `inventory:receive` permission)
+- [X] T024 [US2] Wire `restock-modal` trigger button into `inventory-table.tsx` action column (visible only when `inventory:receive` permission present; passes `productId`, `currentVersion`, `currentStock`, `uomClass` props)
 
 **Checkpoint**: US2 fully functional. Restock flow independently verifiable.
 
