@@ -23,7 +23,33 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "organization_audit_events": {
+            "inventory": {
+                  Row: {
+                    "created_at": string,"id": string,"organization_id": string,"product_id": string,"quantity": number,"reorder_point": number | null,"reorder_quantity": number | null,"updated_at": string,"version": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"organization_id": string,"product_id": string,"quantity"?: number,"reorder_point"?: number | null,"reorder_quantity"?: number | null,"updated_at"?: string,"version"?: number
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"organization_id"?: string,"product_id"?: string,"quantity"?: number,"reorder_point"?: number | null,"reorder_quantity"?: number | null,"updated_at"?: string,"version"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "inventory_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "inventory_product_id_fkey"
+      columns: ["product_id"]
+isOneToOne: false
+      referencedRelation: "products"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"organization_audit_events": {
                   Row: {
                     "actor_id": string,"created_at": string,"event_type": string,"id": string,"metadata": NonNullable<Json>,"organization_id": string
                   }
@@ -291,13 +317,112 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"stock_movement_costs": {
+                  Row: {
+                    "created_at": string,"currency": string,"movement_id": string,"organization_id": string,"unit_cost": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"currency": string,"movement_id": string,"organization_id": string,"unit_cost": number
+                  }
+                  Update: {
+                    "created_at"?: string,"currency"?: string,"movement_id"?: string,"organization_id"?: string,"unit_cost"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "stock_movement_costs_movement_id_fkey"
+      columns: ["movement_id"]
+isOneToOne: true
+      referencedRelation: "stock_movements"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stock_movement_costs_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"stock_movements": {
+                  Row: {
+                    "created_at": string,"created_by": string,"id": string,"idempotency_key": string | null,"idempotency_payload_hash": string | null,"inventory_id": string,"movement_type": string,"organization_id": string,"product_id": string,"quantity_after": number,"quantity_before": number,"quantity_delta": number,"reason": string,"reference_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by": string,"id"?: string,"idempotency_key"?: string | null,"idempotency_payload_hash"?: string | null,"inventory_id": string,"movement_type": string,"organization_id": string,"product_id": string,"quantity_after": number,"quantity_before": number,"quantity_delta": number,"reason": string,"reference_id"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string,"id"?: string,"idempotency_key"?: string | null,"idempotency_payload_hash"?: string | null,"inventory_id"?: string,"movement_type"?: string,"organization_id"?: string,"product_id"?: string,"quantity_after"?: number,"quantity_before"?: number,"quantity_delta"?: number,"reason"?: string,"reference_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "fk_movements_inventory_composite"
+      columns: ["organization_id","inventory_id","product_id"]
+isOneToOne: false
+      referencedRelation: "inventory"
+      referencedColumns: ["organization_id","id","product_id"]
+    },{
+      foreignKeyName: "fk_movements_org_product"
+      columns: ["organization_id","product_id"]
+isOneToOne: false
+      referencedRelation: "products"
+      referencedColumns: ["organization_id","id"]
+    },{
+      foreignKeyName: "stock_movements_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "stock_movements_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"zero_delta_stocktakes": {
+                  Row: {
+                    "created_at": string,"created_by": string,"id": string,"idempotency_key": string,"idempotency_payload_hash": string,"organization_id": string,"product_id": string,"target_physical_count": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by": string,"id"?: string,"idempotency_key": string,"idempotency_payload_hash": string,"organization_id": string,"product_id": string,"target_physical_count": number
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string,"id"?: string,"idempotency_key"?: string,"idempotency_payload_hash"?: string,"organization_id"?: string,"product_id"?: string,"target_physical_count"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "zero_delta_stocktakes_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "zero_delta_stocktakes_organization_id_fkey"
+      columns: ["organization_id"]
+isOneToOne: false
+      referencedRelation: "organizations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "zero_delta_stocktakes_product_id_fkey"
+      columns: ["product_id"]
+isOneToOne: false
+      referencedRelation: "products"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
             [_ in never]: never
           }
           Functions: {
-            "accept_organization_invitation":
+            "_execute_inventory_mutation_core":
+{ Args: { "p_created_by": string,"p_expected_version"?: number,"p_idempotency_key": string,"p_idempotency_payload_hash": string,"p_movement_type": string,"p_org_id": string,"p_product_id": string,"p_quantity_delta": number,"p_reason": string,"p_reference_id": string }; Returns: Json
+                           },
+"accept_organization_invitation":
 { Args: { "p_token_hash": string }; Returns: Json
                            },
 "archive_product":
@@ -329,6 +454,9 @@ isOneToOne: false
                            },
 "decline_organization_invitation":
 { Args: { "p_token_hash": string }; Returns: Json
+                           },
+"execute_stock_movement":
+{ Args: { "p_expected_version"?: number,"p_idempotency_key"?: string,"p_movement_type": string,"p_org_id": string,"p_product_id": string,"p_quantity": number,"p_quantity_semantics"?: string,"p_reason": string,"p_reference_id"?: string }; Returns: Json
                            },
 "get_currency_exponent":
 { Args: { "p_currency": string }; Returns: number
@@ -367,6 +495,9 @@ isOneToOne: false
                            },
 "toggle_product_status":
 { Args: { "p_expected_version": number,"p_new_status": string,"p_org_id": string,"p_product_id": string }; Returns: Json
+                           },
+"update_inventory_thresholds":
+{ Args: { "p_expected_version"?: number,"p_org_id": string,"p_product_id": string,"p_reorder_point": number,"p_reorder_quantity": number }; Returns: Json
                            },
 "update_organization_member_role":
 { Args: { "p_new_role": Database["public"]['Enums']["app_role"],"p_org_id": string,"p_target_membership_id": string }; Returns: Json
