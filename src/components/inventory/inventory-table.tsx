@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useTransition } from "react";
+import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
@@ -21,6 +21,7 @@ import {
   getStockStatusBadge,
 } from "@/lib/inventory/formatters";
 import { Button } from "@/components/ui/button";
+import { RestockModal } from "@/components/inventory/restock-modal";
 
 export type InventorySortField = "name" | "sku" | "quantity" | "stock_status";
 export type SortDirection = "asc" | "desc";
@@ -84,6 +85,7 @@ export function InventoryTable({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const [restockItem, setRestockItem] = useState<InventoryItemRow | null>(null);
 
   // Handle column header sorting
   const handleSort = (field: InventorySortField) => {
@@ -488,14 +490,17 @@ export function InventoryTable({
                   {/* Action Buttons */}
                   <td className="py-3.5 pl-3 pr-4 sm:pr-6 whitespace-nowrap text-right text-xs">
                     <div className="flex items-center justify-end gap-1.5">
-                      {/* Restock trigger slot (US2 wiring ready) */}
-                      {canReceiveStock && Boolean(onRestockClick) && item.productStatus === "active" && (
+                      {/* Restock trigger slot (T024, US2) */}
+                      {canReceiveStock && item.productStatus === "active" && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                          onClick={() => onRestockClick?.(item)}
+                          onClick={() => {
+                            setRestockItem(item);
+                            onRestockClick?.(item);
+                          }}
                           title="Receive Stock"
                           data-testid={`restock-btn-${item.productId}`}
                         >
@@ -633,6 +638,29 @@ export function InventoryTable({
             )}
           </div>
         </div>
+      )}
+
+      {/* Restock Modal (T024, US2) */}
+      {restockItem && (
+        <RestockModal
+          isOpen={Boolean(restockItem)}
+          onClose={() => setRestockItem(null)}
+          slug={slug}
+          productId={restockItem.productId}
+          productName={restockItem.productName}
+          sku={restockItem.sku}
+          currentStock={restockItem.quantity}
+          currentVersion={restockItem.version}
+          unitOfMeasure={restockItem.unitOfMeasure}
+          isDiscrete={restockItem.isDiscrete}
+          productStatus={restockItem.productStatus}
+          canReceiveStock={canReceiveStock}
+          onRestockSuccess={(_result) => {
+            startTransition(() => {
+              router.refresh();
+            });
+          }}
+        />
       )}
     </div>
   );

@@ -70,6 +70,8 @@ export const PRODUCT_STATUS_FILTERS = Object.freeze([
 
 export type ProductStatusFilter = (typeof PRODUCT_STATUS_FILTERS)[number];
 
+export { DISCRETE_UOMS, isDiscreteUom } from "@/lib/inventory/formatters";
+
 // ============================================================================
 // Database Row Representations (PostgreSQL Tables)
 // ============================================================================

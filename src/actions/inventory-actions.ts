@@ -19,6 +19,7 @@ import {
   formatCurrency,
   calculateStockStatus,
   getStockStatusPriority,
+  isDiscreteUom,
 } from "@/lib/inventory/formatters";
 import type { ActionResult } from "@/types/auth";
 import type {
@@ -326,7 +327,6 @@ export async function getInventoryListAction(
     }
 
     const currency = context.organization.currency || "USD";
-    const discreteUoms = new Set(["piece", "unit", "box", "pack", "pair", "set"]);
 
     // Map and calculate derived attributes
     let items: InventoryItemRow[] = (rows || []).map((row) => {
@@ -359,7 +359,7 @@ export async function getInventoryListAction(
 
       const qty = parseFloat(String(row.quantity)) || 0;
       const stockStatus = calculateStockStatus(qty, row.reorder_point);
-      const isDiscrete = discreteUoms.has(p?.unit_of_measure || "piece");
+      const isDiscrete = isDiscreteUom(p?.unit_of_measure);
 
       return {
         productId: row.product_id,
@@ -573,8 +573,7 @@ export async function getInventoryProductAction(
     }
 
     const qty = parseFloat(String(invRow.quantity)) || 0;
-    const discreteUoms = new Set(["piece", "unit", "box", "pack", "pair", "set"]);
-    const isDiscrete = discreteUoms.has(p?.unit_of_measure || "piece");
+    const isDiscrete = isDiscreteUom(p?.unit_of_measure);
     const stockStatus = calculateStockStatus(qty, invRow.reorder_point);
     const currency = context.organization.currency || "USD";
 
@@ -682,6 +681,28 @@ export async function recordStockMovementAction(
     void canonicalHash;
 
     const supabase = await createClient();
+
+    // Authoritative Server-Side Discrete UOM Verification (FINDING-P5-001)
+    if (typeof supabase.from === "function") {
+      const { data: productRow } = await supabase
+        .from("products")
+        .select("unit_of_measure")
+        .eq("id", input.productId)
+        .eq("organization_id", context.organization.id)
+        .maybeSingle();
+
+      if (productRow && isDiscreteUom(productRow.unit_of_measure)) {
+        if (!Number.isInteger(input.quantity)) {
+          return {
+            success: false,
+            error: {
+              code: "INTEGER_QUANTITY_REQUIRED",
+              message: "Discrete products require whole integer quantities.",
+            },
+          };
+        }
+      }
+    }
 
     // Call Layer 2 Public Mutation Stored Procedure
     const { data: rawData, error } = await supabase.rpc("execute_stock_movement", {

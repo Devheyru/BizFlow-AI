@@ -923,6 +923,49 @@ describe("T017: Inventory Server Actions Unit Tests", () => {
         expect(res.error.code).toBe("INVALID_QUANTITY_SEMANTICS");
       }
     });
+
+    it("enforces authoritative server-side discrete UOM check even if client omits or sets isDiscrete: false (FINDING-P5-001)", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: receiveOnlyContext as any,
+      });
+
+      const mockFrom = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { unit_of_measure: "piece" },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const mockRpc = vi.fn();
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        from: mockFrom,
+        rpc: mockRpc,
+      } as any);
+
+      // Client passes fractional quantity 12.5 and isDiscrete: false
+      const res = await recordStockMovementAction(mockSlug, {
+        productId: mockProductId,
+        movementType: "restock",
+        quantity: 12.5,
+        isDiscrete: false,
+        reason: "Bypass discrete check test",
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.code).toBe("INTEGER_QUANTITY_REQUIRED");
+        expect(res.error.message).toMatch(/Discrete products require whole integer quantities/i);
+      }
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
   });
 
   // ============================================================================

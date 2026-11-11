@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import type { InventoryItemRow } from "@/types/inventory";
 
@@ -357,6 +357,35 @@ describe("InventoryTable Component (T022, FR-INV-001, FR-INV-003, FR-INV-020, US
 
     // Archived product should NOT have adjust button
     expect(screen.queryByTestId("adjust-btn-prod-4")).toBeNull();
+  });
+
+  it("11. Action Triggers: Clicking Restock button opens RestockModal with product snapshot", () => {
+    render(
+      <InventoryTable
+        items={mockItems}
+        totalCount={4}
+        page={1}
+        pageSize={20}
+        totalPages={1}
+        canViewValuation={false}
+        canReceiveStock={true}
+        slug={mockSlug}
+      />
+    );
+
+    // Initial state: modal should not be rendered
+    expect(screen.queryByTestId("restock-modal")).toBeNull();
+
+    // Click restock on product 1
+    const restockBtn = screen.getByTestId("restock-btn-prod-1");
+    fireEvent.click(restockBtn);
+
+    // Modal opens with product info
+    const modal = screen.getByTestId("restock-modal");
+    expect(modal).toBeInTheDocument();
+    expect(within(modal).getByRole("heading", { name: "Receive Stock" })).toBeInTheDocument();
+    expect(within(modal).getByText("Espresso Dark Roast Beans")).toBeInTheDocument();
+    expect(within(modal).getByText("COF-ESP-001")).toBeInTheDocument();
   });
 });
 
