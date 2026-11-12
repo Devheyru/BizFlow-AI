@@ -107,6 +107,7 @@ describe("InventoryPage Server Component (T018, FR-INV-001, US1)", () => {
         reorderQuantity: 20.0,
         stockStatus: "in_stock",
         version: 1,
+        hasInitialMovement: true,
         unitCost: 10.0,
         totalValue: 155.0,
         currency: "USD",

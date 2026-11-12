@@ -257,6 +257,16 @@ export interface InventoryItemRow {
   reorderQuantity: number | null;
   stockStatus: StockStatus;
   version: number;
+  /**
+   * True when movement history exists for this product (whether initial or regular movements),
+   * disqualifying it from recording initial opening stock (P0025, P0026).
+   * Per Feature 004 specification Section 5 and database rule P0026, initial stock is
+   * strictly forbidden if ANY stock movement history exists.
+   * Server-computed server-side from `public.stock_movements`.
+   * Used to gate the Initial Opening Stock button (T025, US3):
+   * the button is visible only when this is false AND quantity === 0 AND canReceiveStock.
+   */
+  hasInitialMovement: boolean;
   unitCost: number | null; // Protected: requires inventory:read_valuation AND products:read_cost
   totalValue: number | null; // Protected: requires inventory:read_valuation AND products:read_cost
   currency: string | null;
@@ -290,6 +300,7 @@ export interface InventoryProductDetail {
   stockStatus: StockStatus;
   version: number;
   lastMovementAt: string | null;
+  hasInitialMovement?: boolean;
   unitCost?: number | null;
   totalValue?: number | null;
   currency?: string | null;

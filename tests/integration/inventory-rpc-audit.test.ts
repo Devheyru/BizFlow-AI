@@ -544,5 +544,182 @@ describe("Audit D: Real Database Integration Verification (127.0.0.1:54322)", ()
     expect(data.success).toBe(true);
     expect(data.version).toBe(currentVersion + 1);
   });
+
+  // 15. Initial Opening Stock Singularity Enforcement (T025, US3, BR-INV-006, P0026 / uq_stock_movements_initial_per_product)
+  it("rejects duplicate initial opening stock movement on product with existing history (P0026 / singularity constraint)", async () => {
+    // productContinuousId already had an initial stock movement recorded in test 12.
+    // Attempting a second 'initial' movement must be rejected at the database RPC boundary.
+    const dupInitRes = await ownerClient.rpc("execute_stock_movement", {
+      p_org_id: orgIdA,
+      p_product_id: productContinuousId,
+      p_movement_type: "initial",
+      p_quantity: 50.0,
+      p_reason: "Duplicate initial stock attempt",
+      p_idempotency_key: "00000000-0000-4000-8000-000000000016",
+      p_quantity_semantics: "quantity_delta",
+    });
+
+    expect(dupInitRes.error).not.toBeNull();
+    // Database raises P0026 INITIAL_STOCK_NOT_PERMITTED_HISTORY_EXISTS or 23505 unique violation
+    expect(["P0026", "23505", "P0025"]).toContain(dupInitRes.error?.code);
+    expect(dupInitRes.error?.message).toMatch(/INITIAL_STOCK|history exists/i);
+  });
+
+  // ==========================================================================
+  // 16. T025 Movement-History RPC Security & Privilege Verification
+  // ==========================================================================
+  describe("T025 get_products_with_movement_history RPC Live Database Verification", () => {
+    it("16a. Function catalog definition in pg_proc matches security requirements", async () => {
+      const res = await pgClient.query(`
+        SELECT
+          p.proname,
+          r.rolname as owner,
+          p.prosecdef,
+          p.proconfig
+        FROM pg_proc p
+        JOIN pg_roles r ON r.oid = p.proowner
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'get_products_with_movement_history';
+      `);
+
+      expect(res.rows.length).toBe(1);
+      const row = res.rows[0];
+      expect(row.proname).toBe("get_products_with_movement_history");
+      expect(row.owner).toBe("postgres");
+      expect(row.prosecdef).toBe(true); // SECURITY DEFINER
+      expect(row.proconfig).toEqual(["search_path=pg_catalog, public, pg_temp"]);
+    });
+
+    it("16b. Function execution privileges: anon is denied, authenticated is granted", async () => {
+      const res = await pgClient.query(`
+        SELECT
+          has_function_privilege('anon', 'public.get_products_with_movement_history(uuid, uuid[])', 'execute') as anon_exec,
+          has_function_privilege('authenticated', 'public.get_products_with_movement_history(uuid, uuid[])', 'execute') as auth_exec,
+          has_function_privilege('service_role', 'public.get_products_with_movement_history(uuid, uuid[])', 'execute') as service_exec;
+      `);
+
+      expect(res.rows[0].anon_exec).toBe(false);
+      expect(res.rows[0].auth_exec).toBe(true);
+      expect(res.rows[0].service_exec).toBe(true);
+    });
+
+    it("16c. Authenticated authorized member retrieves distinct movement product IDs", async () => {
+      // productContinuousId and productAId both have movements recorded in previous tests
+      const res = await ownerClient.rpc("get_products_with_movement_history", {
+        p_org_id: orgIdA,
+        p_product_ids: null,
+      });
+
+      expect(res.error).toBeNull();
+      expect(Array.isArray(res.data)).toBe(true);
+      const productIds = (res.data as any[]).map((r) => r.product_id);
+      expect(productIds).toContain(productContinuousId);
+
+      // Verify distinctness: no duplicates
+      const uniqueIds = new Set(productIds);
+      expect(productIds.length).toBe(uniqueIds.size);
+    });
+
+    it("16d. Handles explicit candidate IDs array filtering correctly", async () => {
+      // Create a brand new product in orgIdA without any movements
+      const sku = `SKU-LIVE-CLEAN-${Date.now()}`;
+      const newProdRes = await pgClient.query(
+        `INSERT INTO public.products (organization_id, name, sku, unit_of_measure, status, created_by, updated_by)
+         VALUES ($1, 'Live Clean Product', $2, 'piece', 'active', $3, $3)
+         RETURNING id;`,
+        [orgIdA, sku, ownerUserId]
+      );
+      const cleanProdId = newProdRes.rows[0].id;
+
+      // Call RPC passing both a product with history and the clean product
+      const res = await ownerClient.rpc("get_products_with_movement_history", {
+        p_org_id: orgIdA,
+        p_product_ids: [productContinuousId, cleanProdId],
+      });
+
+      expect(res.error).toBeNull();
+      const productIds = (res.data as any[]).map((r) => r.product_id);
+      expect(productIds).toContain(productContinuousId);
+      expect(productIds).not.toContain(cleanProdId); // Clean product has no history
+    });
+
+    it("16e. Cross-tenant isolation: rejects retrieval for an organization where caller has no membership (P0002)", async () => {
+      // managerClient is an active member of orgIdA, but has NO membership in orgIdB
+      const res = await managerClient.rpc("get_products_with_movement_history", {
+        p_org_id: orgIdB,
+        p_product_ids: null,
+      });
+
+      expect(res.error).not.toBeNull();
+      expect(res.error?.code).toBe("P0002");
+      expect(res.error?.message).toMatch(/MEMBERSHIP_INACTIVE/i);
+    });
+
+    it("16f. Anon client without session is denied from invoking RPC", async () => {
+      const anonClient = createClient(supabaseUrl, anonKey);
+      const res = await anonClient.rpc("get_products_with_movement_history", {
+        p_org_id: orgIdA,
+        p_product_ids: null,
+      });
+
+      expect(res.error).not.toBeNull();
+      // PostgREST/Postgres denies execution to anon role (42501 or permission denied)
+      expect(["42501", "PGRST202", "08001"]).toContain(res.error?.code);
+    });
+
+    it("16g. Negative RBAC: active member without inventory:read is rejected with 42501 and receives zero product IDs", async () => {
+      // 1. Capture exact initial mapping state before test execution
+      const preCheck = await pgClient.query(`
+        SELECT 1 FROM public.role_permissions
+        WHERE role = 'cashier' AND permission_id = 'inventory:read';
+      `);
+      const mappingOriginallyExisted = preCheck.rows.length > 0;
+
+      try {
+        // 2. Temporarily revoke 'inventory:read' from role 'cashier' if it exists
+        if (mappingOriginallyExisted) {
+          await pgClient.query(`
+            DELETE FROM public.role_permissions
+            WHERE role = 'cashier' AND permission_id = 'inventory:read';
+          `);
+        }
+
+        // 3. cashierClient is an active member in orgIdA, but now lacks 'inventory:read'
+        const res = await cashierClient.rpc("get_products_with_movement_history", {
+          p_org_id: orgIdA,
+          p_product_ids: null,
+        });
+
+        // 4. PostgreSQL must reject the call with 42501 (INSUFFICIENT_PERMISSIONS)
+        expect(res.error).not.toBeNull();
+        expect(res.error?.code).toBe("42501");
+        expect(res.error?.message).toMatch(/INSUFFICIENT_PERMISSIONS/i);
+
+        // 5. Must return NO data (null data on error, zero product IDs leaked)
+        expect(res.data).toBeNull();
+      } finally {
+        // 6. Guarantee exact restoration of initial mapping state
+        if (mappingOriginallyExisted) {
+          await pgClient.query(`
+            INSERT INTO public.role_permissions (role, permission_id)
+            VALUES ('cashier', 'inventory:read')
+            ON CONFLICT (role, permission_id) DO NOTHING;
+          `);
+        } else {
+          await pgClient.query(`
+            DELETE FROM public.role_permissions
+            WHERE role = 'cashier' AND permission_id = 'inventory:read';
+          `);
+        }
+
+        // 7. Verify post-cleanup state matches pre-check exactly
+        const postCheck = await pgClient.query(`
+          SELECT 1 FROM public.role_permissions
+          WHERE role = 'cashier' AND permission_id = 'inventory:read';
+        `);
+        expect(postCheck.rows.length > 0).toBe(mappingOriginallyExisted);
+      }
+    });
+  });
 });
 

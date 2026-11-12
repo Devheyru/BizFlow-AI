@@ -72,8 +72,13 @@ function mapDatabaseError(err: { code?: string; message?: string }): { code: str
   if (err.code && KNOWN_INVENTORY_ERRORS[err.code]) {
     return KNOWN_INVENTORY_ERRORS[err.code]!;
   }
-  // Check for unique constraint violation on initial stock
-  if (err.message?.includes("uq_stock_movements_initial_per_product") || err.code === "23505") {
+  // Check for unique constraint violation on initial stock or naming variations (T025, P0025)
+  if (
+    err.message?.includes("uq_stock_movements_initial_per_product") ||
+    err.message?.includes("INITIAL_STOCK_ALREADY_ESTABLISHED") ||
+    err.message?.includes("INITIAL_STOCK_ALREADY_RECORDED") ||
+    err.code === "23505"
+  ) {
     return KNOWN_INVENTORY_ERRORS.P0025!;
   }
   // Check message substring for known error names
@@ -214,6 +219,160 @@ export async function getInventoryOverviewAction(
   }
 }
 
+/**
+ * Detects whether an RPC failure is genuinely due to the function not being deployed
+ * or missing from PostgREST schema cache (as opposed to permission/auth/timeout/db errors).
+ */
+export function isRpcUnavailableError(error: any): boolean {
+  if (!error) return false;
+  // PGRST202: PostgREST schema cache function not found
+  if (error.code === "PGRST202") return true;
+  // 42883: PostgreSQL undefined_function
+  if (error.code === "42883") return true;
+  const msg = typeof error.message === "string" ? error.message.toLowerCase() : "";
+  if (
+    msg.includes("could not find the function") ||
+    msg.includes("schema cache") ||
+    (msg.includes("function") && msg.includes("does not exist"))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Retrieves the set of product IDs with recorded stock movements for the tenant.
+ * - Prioritizes the server-side RPC `get_products_with_movement_history` (SELECT DISTINCT inside PostgreSQL).
+ * - Falls back to complete, paginated PostgREST retrieval (using .order("id") and .range(from, to) with PAGE_SIZE = 1000)
+ *   ONLY when the RPC is confirmed unavailable in the schema cache (e.g. PGRST202 / 42883).
+ *   The unique UUID primary key ordering provides deterministic pagination over a stable result set.
+ *   If concurrent inserts occur during pagination, the database mutation's authoritative P0026 check
+ *   guarantees that initial opening stock cannot be recorded on a product with history.
+ * - Security & Authorization Guard: Authorization failures (42501), inactive membership (P0002),
+ *   inactive organization (P0001), statement timeouts (57014), and database connection errors
+ *   FAIL CLOSED immediately and NEVER trigger fallback.
+ * - Fails closed: if any query fails, returns { success: false, error } to prevent invalid Initial Opening Stock exposure.
+ */
+export async function fetchMovementHistoryProductIds(
+  supabase: any,
+  organizationId: string,
+  candidateProductIds?: string[]
+): Promise<{ success: true; movementProductIds: Set<string> } | { success: false; error: any }> {
+  let shouldFallback = typeof supabase.rpc !== "function";
+
+  // 1. Try server-side RPC first (guaranteed DISTINCT, zero PostgREST truncation risk)
+  if (typeof supabase.rpc === "function") {
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "get_products_with_movement_history",
+        {
+          p_org_id: organizationId,
+          p_product_ids: candidateProductIds && candidateProductIds.length > 0 ? candidateProductIds : null,
+        }
+      );
+
+      if (!rpcError) {
+        if (Array.isArray(rpcData)) {
+          const set = new Set<string>();
+          for (const item of rpcData) {
+            const pid = typeof item === "string" ? item : item?.product_id;
+            if (pid) set.add(pid);
+          }
+          return { success: true, movementProductIds: set };
+        }
+        return { success: false, error: new Error("RPC returned invalid payload") };
+      }
+
+      // RPC returned an error: ONLY genuine missing-function/schema-cache errors may trigger fallback
+      if (isRpcUnavailableError(rpcError)) {
+        shouldFallback = true;
+      } else {
+        // Authorization (42501), inactive org/membership (P0001/P0002), database errors:
+        // FAIL CLOSED immediately. Do NOT bypass security via fallback.
+        return { success: false, error: rpcError };
+      }
+    } catch (err: any) {
+      if (isRpcUnavailableError(err)) {
+        shouldFallback = true;
+      } else {
+        return { success: false, error: err };
+      }
+    }
+  }
+
+  if (!shouldFallback) {
+    return { success: false, error: new Error("RPC execution failed") };
+  }
+
+  // 2. Complete, paginated PostgREST query (handles > 1000 movements across multiple pages)
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  let hasMore = true;
+  const movementProductIds = new Set<string>();
+
+  while (hasMore) {
+    let query = supabase
+      .from("stock_movements")
+      .select("product_id")
+      .eq("organization_id", organizationId);
+
+    if (candidateProductIds && candidateProductIds.length > 0) {
+      if (typeof query.in === "function") {
+        query = query.in("product_id", candidateProductIds);
+      }
+    }
+
+    // Deterministic sort ordering using unique UUID primary key id.
+    // Note: id is a unique UUID primary key (not a monotonic counter).
+    // Unique ordering guarantees deterministic traversal over a stable result set.
+    // Offset-based pagination does not guarantee an immutable snapshot across concurrent
+    // inserts; however, the database RPC's P0026 validation remains authoritative
+    // and will reject any mutation if history is introduced after this check.
+    if (typeof query.order === "function") {
+      query = query.order("id", { ascending: true });
+    }
+
+    const hasRange = typeof query.range === "function";
+    if (hasRange) {
+      query = query.range(from, from + PAGE_SIZE - 1);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      // FAIL CLOSED: Never assume no history when the database query fails!
+      return { success: false, error };
+    }
+
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      for (const row of data) {
+        if (row.product_id) movementProductIds.add(row.product_id);
+      }
+
+      // Early exit only if candidateProductIds is specified, non-empty, and EVERY candidate
+      // has been found in movementProductIds.
+      if (
+        candidateProductIds &&
+        candidateProductIds.length > 0 &&
+        candidateProductIds.every((id) => movementProductIds.has(id))
+      ) {
+        hasMore = false;
+        break;
+      }
+
+      // If query does not support pagination (e.g. basic unit test mock) or returned fewer than PAGE_SIZE, we are done
+      if (!hasRange || data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    }
+  }
+
+  return { success: true, movementProductIds };
+}
+
 // ============================================================================
 // 2. getInventoryListAction (T017, US1)
 // ============================================================================
@@ -326,6 +485,24 @@ export async function getInventoryListAction(
       return { success: false, error: mapDatabaseError(error) };
     }
 
+    // Identify zero-stock candidate products that could be eligible for Initial Opening Stock
+    const candidateProductIds = (rows || [])
+      .filter((r) => (parseFloat(String(r.quantity)) || 0) === 0)
+      .map((r) => r.product_id);
+
+    const historyRes = await fetchMovementHistoryProductIds(
+      supabase,
+      context.organization.id,
+      candidateProductIds
+    );
+
+    if (!historyRes.success) {
+      // FAIL CLOSED: If movement history query fails, do not expose inaccurate Initial Opening Stock eligibility
+      return { success: false, error: mapDatabaseError(historyRes.error) };
+    }
+
+    const movementProductIds = historyRes.movementProductIds;
+
     const currency = context.organization.currency || "USD";
 
     // Map and calculate derived attributes
@@ -375,6 +552,7 @@ export async function getInventoryListAction(
         reorderQuantity: row.reorder_quantity !== null ? parseFloat(String(row.reorder_quantity)) : null,
         stockStatus,
         version: row.version,
+        hasInitialMovement: qty > 0 || movementProductIds.has(row.product_id),
         unitCost: allowValuation && costPrice !== null && !isNaN(costPrice) ? costPrice : null,
         totalValue:
           allowValuation && costPrice !== null && !isNaN(costPrice)
@@ -543,8 +721,8 @@ export async function getInventoryProductAction(
       };
     }
 
-    // Get last movement timestamp
-    const { data: lastMv } = await supabase
+    // Get last movement timestamp (fails closed on error)
+    const { data: lastMv, error: lastMvError } = await supabase
       .from("stock_movements")
       .select("created_at")
       .eq("organization_id", context.organization.id)
@@ -552,6 +730,23 @@ export async function getInventoryProductAction(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (lastMvError) {
+      return { success: false, error: mapDatabaseError(lastMvError) };
+    }
+
+    // Check if initial opening stock movement exists (T025, US3)
+    const { data: initialMv, error: initialMvError } = await supabase
+      .from("stock_movements")
+      .select("id")
+      .eq("organization_id", context.organization.id)
+      .eq("product_id", productId)
+      .eq("movement_type", "initial")
+      .maybeSingle();
+
+    if (initialMvError) {
+      return { success: false, error: mapDatabaseError(initialMvError) };
+    }
 
     const p = invRow.products as unknown as {
       id: string;
@@ -593,6 +788,7 @@ export async function getInventoryProductAction(
         stockStatus,
         version: invRow.version,
         lastMovementAt: lastMv?.created_at || null,
+        hasInitialMovement: qty > 0 || Boolean(lastMv || initialMv),
         unitCost: allowValuation && costPrice !== null && !isNaN(costPrice) ? costPrice : null,
         totalValue:
           allowValuation && costPrice !== null && !isNaN(costPrice)
