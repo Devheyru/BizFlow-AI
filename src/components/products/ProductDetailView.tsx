@@ -42,6 +42,7 @@ export interface ProductDetailViewProps {
   canArchive?: boolean;
   slug: string;
   auditEvents?: AuditEventItem[];
+  inventorySlot?: React.ReactNode;
 }
 
 /**
@@ -63,6 +64,7 @@ export function ProductDetailView({
   canArchive = false,
   slug,
   auditEvents = [],
+  inventorySlot,
 }: ProductDetailViewProps) {
   const [imageError, setImageError] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
@@ -335,6 +337,9 @@ export function ProductDetailView({
               </div>
             )}
           </div>
+
+          {/* Embedded Inventory Summary (Feature 004, T035) */}
+          {inventorySlot}
 
           {/* Description Card */}
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm space-y-3">

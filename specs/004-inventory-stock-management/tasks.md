@@ -161,7 +161,7 @@
 
 **Purpose**: Embedded inventory summary card on the existing product details page (Feature 003 route).
 
-- [ ] T035 Create `src/app/[slug]/products/[productId]/components/inventory-summary-card.tsx` (embedded card showing current stock, stock status badge, reorder threshold, last movement date; calls `getInventoryProductAction`; gracefully omits when caller lacks `inventory:read`; conditionally shows valuation figures only when `canViewValuation` is true — server-computed boolean requiring BOTH `inventory:read_valuation` AND `products:read_cost`; `getInventoryProductAction` strips cost fields from the response before serialization when combined permission is absent)
+- [X] T035 Create `src/app/[slug]/products/[productId]/components/inventory-summary-card.tsx` (embedded card showing current stock, stock status badge, reorder threshold, last movement date; calls `getInventoryProductAction`; gracefully omits when caller lacks `inventory:read`; conditionally shows valuation figures only when `canViewValuation` is true — server-computed boolean requiring BOTH `inventory:read_valuation` AND `products:read_cost`; `getInventoryProductAction` strips cost fields from the response before serialization when combined permission is absent)
 
 ---
 
