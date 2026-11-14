@@ -1,7 +1,7 @@
 import type { AppRole, PermissionKey, TenantContext } from "@/types/auth";
 
 /**
- * Authoritative System Permissions Catalog (Features 002 & 003)
+ * Authoritative System Permissions Catalog (Features 002, 003 & 004)
  * All permissions strictly use colon-separated `<resource>:<action>` format.
  */
 export const SYSTEM_PERMISSIONS = [
@@ -23,6 +23,12 @@ export const SYSTEM_PERMISSIONS = [
   "categories:create",
   "categories:update",
   "categories:archive",
+  // Feature 004: Inventory & Stock Management
+  "inventory:read",
+  "inventory:read_valuation",
+  "inventory:receive",
+  "inventory:adjust",
+  "inventory:history",
 ] as const;
 
 export type SystemPermission = (typeof SYSTEM_PERMISSIONS)[number];
@@ -50,6 +56,11 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
     "categories:create",
     "categories:update",
     "categories:archive",
+    "inventory:read",
+    "inventory:read_valuation",
+    "inventory:receive",
+    "inventory:adjust",
+    "inventory:history",
   ],
   manager: [
     "employees:read",
@@ -60,10 +71,16 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
     "categories:read",
     "categories:create",
     "categories:update",
+    "inventory:read",
+    "inventory:read_valuation",
+    "inventory:receive",
+    "inventory:adjust",
+    "inventory:history",
   ],
   cashier: [
     "products:read",
     "categories:read",
+    "inventory:read",
   ],
 };
 

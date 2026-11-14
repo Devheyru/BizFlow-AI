@@ -3,8 +3,8 @@ import {
   getInventoryListAction,
   getInventoryProductAction,
   fetchMovementHistoryProductIds,
-  isRpcUnavailableError,
 } from "@/actions/inventory-actions";
+import { isRpcUnavailableError } from "@/lib/inventory/rpc-errors";
 import * as authContext from "@/lib/auth/context";
 import * as supabaseServer from "@/lib/supabase/server";
 

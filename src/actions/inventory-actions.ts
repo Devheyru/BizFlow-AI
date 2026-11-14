@@ -15,6 +15,7 @@ import {
   movementHistoryQuerySchema,
 } from "@/lib/validations/inventory";
 import { computeCanonicalPayloadHash } from "@/lib/inventory/canonical-hash";
+import { isRpcUnavailableError } from "@/lib/inventory/rpc-errors";
 import {
   formatCurrency,
   calculateStockStatus,
@@ -219,26 +220,6 @@ export async function getInventoryOverviewAction(
   }
 }
 
-/**
- * Detects whether an RPC failure is genuinely due to the function not being deployed
- * or missing from PostgREST schema cache (as opposed to permission/auth/timeout/db errors).
- */
-export function isRpcUnavailableError(error: any): boolean {
-  if (!error) return false;
-  // PGRST202: PostgREST schema cache function not found
-  if (error.code === "PGRST202") return true;
-  // 42883: PostgreSQL undefined_function
-  if (error.code === "42883") return true;
-  const msg = typeof error.message === "string" ? error.message.toLowerCase() : "";
-  if (
-    msg.includes("could not find the function") ||
-    msg.includes("schema cache") ||
-    (msg.includes("function") && msg.includes("does not exist"))
-  ) {
-    return true;
-  }
-  return false;
-}
 
 /**
  * Retrieves the set of product IDs with recorded stock movements for the tenant.
