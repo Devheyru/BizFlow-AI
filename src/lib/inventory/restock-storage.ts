@@ -14,22 +14,25 @@ export interface PendingRestockSession {
   referenceId: string | null;
   expectedVersion: number;
   createdAt: number;
+  mode?: "restock" | "initial";
 }
 
 const STORAGE_PREFIX = "bizflow_restock_pending_";
 const MAX_PENDING_AGE_MS = 30 * 60 * 1000; // 30 minutes validity window
 
-export function getPendingRestockKey(slug: string, productId: string): string {
-  return `${STORAGE_PREFIX}${slug}_${productId}`;
+export function getPendingRestockKey(slug: string, productId: string, mode?: "restock" | "initial"): string {
+  return mode === "initial"
+    ? `${STORAGE_PREFIX}${slug}_${productId}_initial`
+    : `${STORAGE_PREFIX}${slug}_${productId}`;
 }
 
 /**
- * Persists the in-flight restock payload and its stable idempotency key to sessionStorage.
+ * Persists the in-flight restock/initial payload and its stable idempotency key to sessionStorage.
  */
 export function savePendingRestock(session: PendingRestockSession): void {
   if (typeof window === "undefined") return;
   try {
-    const key = getPendingRestockKey(session.slug, session.productId);
+    const key = getPendingRestockKey(session.slug, session.productId, session.mode);
     window.sessionStorage.setItem(key, JSON.stringify(session));
   } catch {
     // Graceful fallback if storage quota exceeded or disabled in private browsing
@@ -37,13 +40,13 @@ export function savePendingRestock(session: PendingRestockSession): void {
 }
 
 /**
- * Loads any unconfirmed restock session for the given organization and product.
+ * Loads any unconfirmed restock/initial session for the given organization and product.
  * Automatically cleans up expired sessions (> 30 minutes).
  */
-export function loadPendingRestock(slug: string, productId: string): PendingRestockSession | null {
+export function loadPendingRestock(slug: string, productId: string, mode?: "restock" | "initial"): PendingRestockSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const key = getPendingRestockKey(slug, productId);
+    const key = getPendingRestockKey(slug, productId, mode);
     const raw = window.sessionStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PendingRestockSession;
@@ -63,12 +66,12 @@ export function loadPendingRestock(slug: string, productId: string): PendingRest
 }
 
 /**
- * Clears the pending restock session upon confirmed transaction completion.
+ * Clears the pending restock/initial session upon confirmed transaction completion.
  */
-export function clearPendingRestock(slug: string, productId: string): void {
+export function clearPendingRestock(slug: string, productId: string, mode?: "restock" | "initial"): void {
   if (typeof window === "undefined") return;
   try {
-    const key = getPendingRestockKey(slug, productId);
+    const key = getPendingRestockKey(slug, productId, mode);
     window.sessionStorage.removeItem(key);
   } catch {
     // Ignore storage deletion errors

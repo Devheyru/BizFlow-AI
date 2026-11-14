@@ -10,6 +10,7 @@ import {
   ArrowDown,
   ExternalLink,
   PlusCircle,
+  PackagePlus,
   SlidersHorizontal,
   Target,
 } from "lucide-react";
@@ -46,6 +47,7 @@ export interface InventoryTableProps {
   slug: string;
   hasActiveFilters?: boolean;
   onRestockClick?: (item: InventoryItemRow) => void;
+  onInitialStockClick?: (item: InventoryItemRow) => void;
   onAdjustClick?: (item: InventoryItemRow) => void;
   onThresholdClick?: (item: InventoryItemRow) => void;
 }
@@ -78,6 +80,7 @@ export function InventoryTable({
   slug,
   hasActiveFilters = false,
   onRestockClick,
+  onInitialStockClick,
   onAdjustClick,
   onThresholdClick,
 }: InventoryTableProps) {
@@ -86,6 +89,7 @@ export function InventoryTable({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [restockItem, setRestockItem] = useState<InventoryItemRow | null>(null);
+  const [modalMode, setModalMode] = useState<"restock" | "initial">("restock");
 
   // Handle column header sorting
   const handleSort = (field: InventorySortField) => {
@@ -490,6 +494,29 @@ export function InventoryTable({
                   {/* Action Buttons */}
                   <td className="py-3.5 pl-3 pr-4 sm:pr-6 whitespace-nowrap text-right text-xs">
                     <div className="flex items-center justify-end gap-1.5">
+                      {/* Initial Stock trigger slot (T025, US3) */}
+                      {canReceiveStock &&
+                        item.productStatus === "active" &&
+                        item.quantity === 0 &&
+                        !item.hasInitialMovement && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                            onClick={() => {
+                              setModalMode("initial");
+                              setRestockItem(item);
+                              onInitialStockClick?.(item);
+                            }}
+                            title="Opening Stock"
+                            data-testid={`initial-stock-btn-${item.productId}`}
+                          >
+                            <PackagePlus className="h-4 w-4" />
+                            <span className="hidden md:inline ml-1 text-xs">Opening Stock</span>
+                          </Button>
+                        )}
+
                       {/* Restock trigger slot (T024, US2) */}
                       {canReceiveStock && item.productStatus === "active" && (
                         <Button
@@ -498,6 +525,7 @@ export function InventoryTable({
                           size="sm"
                           className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
                           onClick={() => {
+                            setModalMode("restock");
                             setRestockItem(item);
                             onRestockClick?.(item);
                           }}
@@ -655,6 +683,7 @@ export function InventoryTable({
           isDiscrete={restockItem.isDiscrete}
           productStatus={restockItem.productStatus}
           canReceiveStock={canReceiveStock}
+          mode={modalMode}
           onRestockSuccess={(_result) => {
             startTransition(() => {
               router.refresh();

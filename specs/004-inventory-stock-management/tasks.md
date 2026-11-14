@@ -103,7 +103,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Add `initial` movement type mode to `restock-modal.tsx` (conditional UI label "Opening Stock" vs "Restock"; quantity field with same UOM integer enforcement; `movement_type = 'initial'` payload; calls `recordStockMovementAction`; surfaces `INITIAL_STOCK_ALREADY_RECORDED` error from `uq_stock_movements_initial_per_product` unique violation; button available only when `inventory:receive` and current stock is 0 with no prior `initial` movement)
+- [X] T025 [US3] Add `initial` movement type mode to `restock-modal.tsx` (conditional UI label "Opening Stock" vs "Restock"; quantity field with same UOM integer enforcement; `movement_type = 'initial'` payload; calls `recordStockMovementAction`; surfaces `INITIAL_STOCK_ALREADY_RECORDED` error from `uq_stock_movements_initial_per_product` unique violation; button available only when `inventory:receive` and current stock is 0 with no prior `initial` movement)
 
 **Checkpoint**: US3 fully functional. Initial stock singularity independently verifiable.
 

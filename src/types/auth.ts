@@ -42,7 +42,12 @@ export type PermissionKey =
   | "categories:read"
   | "categories:create"
   | "categories:update"
-  | "categories:archive";
+  | "categories:archive"
+  | "inventory:read"
+  | "inventory:read_valuation"
+  | "inventory:receive"
+  | "inventory:adjust"
+  | "inventory:history";
 
 // ============================================================================
 // Server Action Result Pattern

@@ -40,6 +40,11 @@ export interface RestockModalProps {
   isDiscrete: boolean;
   productStatus: "active" | "inactive" | "archived";
   canReceiveStock: boolean;
+  /**
+   * Movement mode: 'restock' for regular replenishments, 'initial' for recording opening stock (T025, US3).
+   * Defaults to 'restock'.
+   */
+  mode?: "restock" | "initial";
   onRestockSuccess?: (result: StockMutationResult) => void;
 }
 
@@ -73,8 +78,10 @@ export function RestockModal({
   isDiscrete,
   productStatus,
   canReceiveStock,
+  mode = "restock",
   onRestockSuccess,
 }: RestockModalProps) {
+  const isInitial = mode === "initial";
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -101,7 +108,7 @@ export function RestockModal({
   // Check for in-flight unconfirmed submission or initialize clean state
   useEffect(() => {
     if (isOpen) {
-      const pending = loadPendingRestock(slug, productId);
+      const pending = loadPendingRestock(slug, productId, mode);
       if (pending) {
         setIdempotencyKey(pending.idempotencyKey);
         setPendingRecovery(pending);
@@ -128,11 +135,11 @@ export function RestockModal({
         clearTimeout(closeTimerRef.current);
       }
     };
-  }, [isOpen, slug, productId, reset]);
+  }, [isOpen, slug, productId, mode, reset]);
 
   // Allows discarding an unconfirmed session to start fresh with a new UUID
   const handleStartFresh = () => {
-    clearPendingRestock(slug, productId);
+    clearPendingRestock(slug, productId, mode);
     setPendingRecovery(null);
     setIdempotencyKey(crypto.randomUUID());
     reset({
@@ -171,20 +178,32 @@ export function RestockModal({
 
     // 1. Permission guard
     if (!canReceiveStock) {
-      setErrorMessage("Unauthorized: You do not have permission to receive stock.");
+      setErrorMessage(
+        isInitial
+          ? "Unauthorized: You do not have permission to record opening stock."
+          : "Unauthorized: You do not have permission to receive stock."
+      );
       setErrorCode("FORBIDDEN");
       return;
     }
 
     // 2. Lifecycle pre-checks
     if (productStatus === "archived") {
-      setErrorMessage("Cannot receive stock for archived products. Stock operations are restricted to write-offs.");
+      setErrorMessage(
+        isInitial
+          ? "Cannot record opening stock for archived products."
+          : "Cannot receive stock for archived products. Stock operations are restricted to write-offs."
+      );
       setErrorCode("PRODUCT_ARCHIVED_STOCK_FORBIDDEN");
       return;
     }
 
     if (productStatus === "inactive") {
-      setErrorMessage("Cannot receive stock for inactive products. Product must be activated first.");
+      setErrorMessage(
+        isInitial
+          ? "Cannot record opening stock for inactive products. Product must be activated first."
+          : "Cannot receive stock for inactive products. Product must be activated first."
+      );
       setErrorCode("PRODUCT_INACTIVE_RESTOCK_BLOCKED");
       return;
     }
@@ -192,7 +211,11 @@ export function RestockModal({
     // 3. Numeric conversion & UOM discrete enforcement
     const rawNum = typeof data.quantity === "string" ? parseFloat(data.quantity) : data.quantity;
     if (isNaN(rawNum) || rawNum <= 0) {
-      setErrorMessage("Restock quantity must be a positive number greater than zero.");
+      setErrorMessage(
+        isInitial
+          ? "Opening stock quantity must be a positive number greater than zero."
+          : "Restock quantity must be a positive number greater than zero."
+      );
       setErrorCode("NON_POSITIVE_QUANTITY");
       return;
     }
@@ -211,7 +234,7 @@ export function RestockModal({
         pendingRecovery.reason.trim() === data.reason.trim() &&
         (pendingRecovery.referenceId ?? "") === (data.referenceId?.trim() ?? "");
       if (!isSamePayload) {
-        // User modified restock details — start fresh logical operation with new key
+        // User modified details — start fresh logical operation with new key
         activeKey = crypto.randomUUID();
         setIdempotencyKey(activeKey);
         setPendingRecovery(null);
@@ -228,12 +251,13 @@ export function RestockModal({
       referenceId: data.referenceId?.trim() || null,
       expectedVersion: currentVersion,
       createdAt: Date.now(),
+      mode,
     });
 
     // 5. Validate payload with canonical Zod schema
     const payload = {
       productId,
-      movementType: "restock" as const,
+      movementType: isInitial ? ("initial" as const) : ("restock" as const),
       quantity: rawNum,
       quantitySemantics: "quantity_delta" as const,
       reason: data.reason.trim(),
@@ -257,14 +281,17 @@ export function RestockModal({
       const res = await recordStockMovementAction(slug, payload);
 
       if (!res.success) {
-        // Clear pending storage only for fatal authorization/lifecycle rejections
+        // Clear pending storage only for fatal authorization/lifecycle/singularity rejections
         if (
           res.error.code === "FORBIDDEN" ||
           res.error.code === "PRODUCT_ARCHIVED_STOCK_FORBIDDEN" ||
           res.error.code === "PRODUCT_INACTIVE_RESTOCK_BLOCKED" ||
-          res.error.code === "INTEGER_QUANTITY_REQUIRED"
+          res.error.code === "INTEGER_QUANTITY_REQUIRED" ||
+          res.error.code === "INITIAL_STOCK_ALREADY_RECORDED" ||
+          res.error.code === "INITIAL_STOCK_ALREADY_ESTABLISHED" ||
+          res.error.code === "INITIAL_STOCK_NOT_PERMITTED_HISTORY_EXISTS"
         ) {
-          clearPendingRestock(slug, productId);
+          clearPendingRestock(slug, productId, mode);
           setPendingRecovery(null);
         }
         setErrorMessage(res.error.message);
@@ -273,7 +300,7 @@ export function RestockModal({
       }
 
       // Successful mutation: clear pending tracking
-      clearPendingRestock(slug, productId);
+      clearPendingRestock(slug, productId, mode);
       setPendingRecovery(null);
       setSuccessResult(res.data);
       onRestockSuccess?.(res.data);
@@ -307,7 +334,13 @@ export function RestockModal({
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                isInitial
+                  ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400"
+                  : "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400"
+              }`}
+            >
               <PlusCircle className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
@@ -315,10 +348,12 @@ export function RestockModal({
                 id="restock-modal-title"
                 className="text-lg font-semibold text-gray-900 dark:text-gray-100"
               >
-                Receive Stock
+                {isInitial ? "Opening Stock" : "Receive Stock"}
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Record inbound inventory delivery to update on-hand balance.
+                {isInitial
+                  ? "Record initial baseline inventory to establish on-hand balance."
+                  : "Record inbound inventory delivery to update on-hand balance."}
               </p>
             </div>
           </div>
@@ -380,11 +415,12 @@ export function RestockModal({
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-emerald-900 dark:text-emerald-200">
-                Stock received successfully!
+                {isInitial ? "Opening stock recorded successfully!" : "Stock received successfully!"}
               </p>
               <p className="mt-0.5">
-                Added +{formatStockQuantity(successResult.quantityDelta, isDiscrete)} {unitOfMeasure}.
-                New balance is <strong>{formatStockQuantity(successResult.quantityAfter, isDiscrete)} {unitOfMeasure}</strong>.
+                {isInitial
+                  ? `Initial balance established at ${formatStockQuantity(successResult.quantityAfter, isDiscrete)} ${unitOfMeasure}.`
+                  : `Added +${formatStockQuantity(successResult.quantityDelta, isDiscrete)} ${unitOfMeasure}. New balance is ${formatStockQuantity(successResult.quantityAfter, isDiscrete)} ${unitOfMeasure}.`}
               </p>
             </div>
           </div>
@@ -399,9 +435,13 @@ export function RestockModal({
             <div className="flex items-start gap-2">
               <RotateCcw className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold">Unconfirmed Restock Recovered</p>
+                <p className="font-semibold">
+                  {isInitial ? "Unconfirmed Opening Stock Recovered" : "Unconfirmed Restock Recovered"}
+                </p>
                 <p className="mt-0.5 text-amber-800 dark:text-amber-300">
-                  A previous restock of <strong>{pendingRecovery.quantity} {unitOfMeasure}</strong> was submitted but its confirmation was interrupted. Retrying with this form will safely check completion without duplicating stock.
+                  {isInitial
+                    ? `A previous opening stock of ${pendingRecovery.quantity} ${unitOfMeasure} was submitted but its confirmation was interrupted. Retrying with this form will safely check completion without duplicating stock.`
+                    : `A previous restock of ${pendingRecovery.quantity} ${unitOfMeasure} was submitted but its confirmation was interrupted. Retrying with this form will safely check completion without duplicating stock.`}
                 </p>
               </div>
             </div>
@@ -434,7 +474,7 @@ export function RestockModal({
           </div>
         )}
 
-        {/* Restock Form */}
+        {/* Restock / Opening Stock Form */}
         {!successResult && (
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
             {/* Quantity Input */}
@@ -443,7 +483,7 @@ export function RestockModal({
                 htmlFor="restock-quantity"
                 className="block text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1"
               >
-                Received Quantity ({unitOfMeasure}){" "}
+                {isInitial ? `Opening Quantity (${unitOfMeasure})` : `Received Quantity (${unitOfMeasure})`}{" "}
                 <span className="text-red-500">*</span>
               </label>
               <input
@@ -456,7 +496,7 @@ export function RestockModal({
                 autoFocus
                 disabled={submitting}
                 {...register("quantity", {
-                  required: "Received quantity is required",
+                  required: isInitial ? "Opening quantity is required" : "Received quantity is required",
                   validate: (val) => {
                     const num = typeof val === "string" ? parseFloat(val) : val;
                     if (isNaN(num) || num <= 0) {
@@ -484,13 +524,13 @@ export function RestockModal({
                 htmlFor="restock-reference"
                 className="block text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1"
               >
-                Supplier / PO Reference{" "}
+                {isInitial ? "Reference / Document" : "Supplier / PO Reference"}{" "}
                 <span className="text-gray-400 font-normal normal-case">(optional)</span>
               </label>
               <input
                 id="restock-reference"
                 type="text"
-                placeholder="e.g. PO-8812, INV-2026-004"
+                placeholder={isInitial ? "e.g. Audit Count Sheet, SETUP-001" : "e.g. PO-8812, INV-2026-004"}
                 maxLength={100}
                 disabled={submitting}
                 {...register("referenceId", {
@@ -520,7 +560,11 @@ export function RestockModal({
               <textarea
                 id="restock-reason"
                 rows={3}
-                placeholder="e.g. Weekly replenishment shipment from primary distributor"
+                placeholder={
+                  isInitial
+                    ? "e.g. Initial inventory count at store launch"
+                    : "e.g. Weekly replenishment shipment from primary distributor"
+                }
                 disabled={submitting}
                 {...register("reason", {
                   required: "Reason is required (min 3 characters)",
@@ -557,11 +601,15 @@ export function RestockModal({
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className={
+                  isInitial
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }
                 data-testid="restock-submit-btn"
               >
                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Confirm Restock
+                {isInitial ? "Confirm Opening Stock" : "Confirm Restock"}
               </Button>
             </div>
           </form>

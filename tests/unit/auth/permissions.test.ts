@@ -107,10 +107,10 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
   });
 
   describe("Rule 3: Automatic Owner Access for Registered Permissions", () => {
-    it("grants Owner access to all 16 registered system permissions dynamically", () => {
+    it("grants Owner access to all 21 registered system permissions dynamically", () => {
       const ownerCtx = createMockContext("owner");
 
-      expect(SYSTEM_PERMISSIONS).toHaveLength(16);
+      expect(SYSTEM_PERMISSIONS).toHaveLength(21);
       for (const permission of SYSTEM_PERMISSIONS) {
         expect(hasPermission(ownerCtx, permission)).toBe(true);
       }
@@ -126,7 +126,7 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
   });
 
   describe("Rule 4: Deterministic Role-Permission Mappings for Non-Owners", () => {
-    it("grants Admin all 16 system permissions", () => {
+    it("grants Admin all 21 system permissions", () => {
       const adminCtx = createMockContext("admin");
 
       for (const permission of SYSTEM_PERMISSIONS) {
@@ -158,6 +158,13 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
       expect(hasPermission(managerCtx, "categories:create")).toBe(true);
       expect(hasPermission(managerCtx, "categories:update")).toBe(true);
       expect(hasPermission(managerCtx, "categories:archive")).toBe(false);
+
+      // Feature 004: inventory operational
+      expect(hasPermission(managerCtx, "inventory:read")).toBe(true);
+      expect(hasPermission(managerCtx, "inventory:read_valuation")).toBe(true);
+      expect(hasPermission(managerCtx, "inventory:receive")).toBe(true);
+      expect(hasPermission(managerCtx, "inventory:adjust")).toBe(true);
+      expect(hasPermission(managerCtx, "inventory:history")).toBe(true);
     });
 
     it("restricts Cashier to retail read-only permissions and denies cost/mutation permissions", () => {
@@ -182,6 +189,13 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
       expect(hasPermission(cashierCtx, "categories:create")).toBe(false);
       expect(hasPermission(cashierCtx, "categories:update")).toBe(false);
       expect(hasPermission(cashierCtx, "categories:archive")).toBe(false);
+
+      // Feature 004: stock read only without valuation or adjustment
+      expect(hasPermission(cashierCtx, "inventory:read")).toBe(true);
+      expect(hasPermission(cashierCtx, "inventory:read_valuation")).toBe(false);
+      expect(hasPermission(cashierCtx, "inventory:receive")).toBe(false);
+      expect(hasPermission(cashierCtx, "inventory:adjust")).toBe(false);
+      expect(hasPermission(cashierCtx, "inventory:history")).toBe(false);
     });
 
     it("evaluates against ROLE_PERMISSIONS static mapping when context.permissions is undefined", () => {

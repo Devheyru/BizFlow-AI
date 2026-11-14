@@ -36,6 +36,7 @@ describe("InventoryTable Component (T022, FR-INV-001, FR-INV-003, FR-INV-020, US
       reorderQuantity: 50.0,
       stockStatus: "in_stock",
       version: 1,
+      hasInitialMovement: true,
       unitCost: 12.5,
       totalValue: 568.75,
       currency: "USD",
@@ -54,6 +55,7 @@ describe("InventoryTable Component (T022, FR-INV-001, FR-INV-003, FR-INV-020, US
       reorderQuantity: 25,
       stockStatus: "low_stock",
       version: 2,
+      hasInitialMovement: true,
       unitCost: 4.0,
       totalValue: 20.0,
       currency: "USD",
@@ -72,6 +74,7 @@ describe("InventoryTable Component (T022, FR-INV-001, FR-INV-003, FR-INV-020, US
       reorderQuantity: 30,
       stockStatus: "out_of_stock",
       version: 3,
+      hasInitialMovement: false,
       unitCost: 2.25,
       totalValue: 0,
       currency: "USD",
@@ -90,7 +93,65 @@ describe("InventoryTable Component (T022, FR-INV-001, FR-INV-003, FR-INV-020, US
       reorderQuantity: null,
       stockStatus: "out_of_stock",
       version: 1,
+      hasInitialMovement: false,
       unitCost: 3.5,
+      totalValue: 0,
+      currency: "USD",
+    },
+    {
+      productId: "prod-5",
+      productName: "Organic Green Tea",
+      sku: "TEA-GRN-005",
+      barcode: null,
+      categoryName: "Tea",
+      productStatus: "active",
+      unitOfMeasure: "box",
+      isDiscrete: true,
+      quantity: 0,
+      reorderPoint: 10,
+      reorderQuantity: 20,
+      stockStatus: "out_of_stock",
+      version: 4,
+      hasInitialMovement: true,
+      unitCost: 5.0,
+      totalValue: 0,
+      currency: "USD",
+    },
+    {
+      productId: "prod-6",
+      productName: "Caramel Drizzle Syrup",
+      sku: "SYR-CAR-006",
+      barcode: null,
+      categoryName: "Syrups",
+      productStatus: "active",
+      unitOfMeasure: "bottle",
+      isDiscrete: true,
+      quantity: 0,
+      reorderPoint: 5,
+      reorderQuantity: 10,
+      stockStatus: "out_of_stock",
+      version: 2,
+      hasInitialMovement: true, // Non-initial movement history exists (e.g. restocked then damaged to 0)
+      unitCost: 6.0,
+      totalValue: 0,
+      currency: "USD",
+    },
+    {
+      productId: "prod-7",
+      productName: "Seasonal Pumpkin Spice",
+      sku: "SYR-PMP-007",
+      barcode: null,
+      categoryName: "Syrups",
+      productStatus: "inactive", // Inactive product status
+      unitOfMeasure: "bottle",
+      isDiscrete: true,
+      quantity: 0,
+      reorderPoint: 5,
+      reorderQuantity: 10,
+      stockStatus: "out_of_stock",
+      version: 1,
+      hasInitialMovement: false, // Zero stock, no movement history, BUT inactive!
+      unitCost: 7.0,
       totalValue: 0,
       currency: "USD",
     },
@@ -386,6 +447,184 @@ describe("InventoryTable Component (T022, FR-INV-001, FR-INV-003, FR-INV-020, US
     expect(within(modal).getByRole("heading", { name: "Receive Stock" })).toBeInTheDocument();
     expect(within(modal).getByText("Espresso Dark Roast Beans")).toBeInTheDocument();
     expect(within(modal).getByText("COF-ESP-001")).toBeInTheDocument();
+  });
+
+  // ============================================================================
+  // T025: Initial Opening Stock Button Visibility & Integration Tests (US3)
+  // ============================================================================
+  describe("T025: Initial Opening Stock Action Button (US3)", () => {
+    it("12. Initial-stock button is visible when canReceiveStock is true, stock is 0, and hasInitialMovement is false", () => {
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={5}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={true}
+          slug={mockSlug}
+        />
+      );
+
+      // prod-3 has quantity=0, hasInitialMovement=false, productStatus='active' -> Opening Stock button VISIBLE
+      const initialStockBtn = screen.getByTestId("initial-stock-btn-prod-3");
+      expect(initialStockBtn).toBeInTheDocument();
+      expect(within(initialStockBtn).getByText(/Opening Stock/i)).toBeInTheDocument();
+    });
+
+    it("13. Initial-stock button is hidden when user lacks inventory:receive permission", () => {
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={5}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={false}
+          slug={mockSlug}
+        />
+      );
+
+      // No initial-stock buttons rendered when canReceiveStock is false
+      expect(screen.queryByTestId("initial-stock-btn-prod-3")).toBeNull();
+    });
+
+    it("14. Initial-stock button is hidden when current stock is greater than zero", () => {
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={5}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={true}
+          slug={mockSlug}
+        />
+      );
+
+      // prod-1 (qty 45.5) and prod-2 (qty 5) must NOT have initial-stock button
+      expect(screen.queryByTestId("initial-stock-btn-prod-1")).toBeNull();
+      expect(screen.queryByTestId("initial-stock-btn-prod-2")).toBeNull();
+    });
+
+    it("15. Initial-stock button is hidden when initial movement already exists (even with 0 stock)", () => {
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={7}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={true}
+          slug={mockSlug}
+        />
+      );
+
+      // prod-5 has quantity=0 but hasInitialMovement=true -> MUST NOT render initial-stock button!
+      expect(screen.queryByTestId("initial-stock-btn-prod-5")).toBeNull();
+    });
+
+    it("15b. Initial-stock button is hidden when non-initial movement history exists (even with 0 stock)", () => {
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={7}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={true}
+          slug={mockSlug}
+        />
+      );
+
+      // prod-6 has quantity=0 but non-initial movement history exists (hasInitialMovement=true) -> MUST NOT render!
+      expect(screen.queryByTestId("initial-stock-btn-prod-6")).toBeNull();
+    });
+
+    it("15c. Initial-stock button is hidden when product is inactive or archived", () => {
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={7}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={true}
+          slug={mockSlug}
+        />
+      );
+
+      // prod-4 has quantity=0, hasInitialMovement=false, but productStatus='archived' -> MUST NOT render
+      expect(screen.queryByTestId("initial-stock-btn-prod-4")).toBeNull();
+
+      // prod-7 has quantity=0, hasInitialMovement=false, but productStatus='inactive' -> MUST NOT render
+      expect(screen.queryByTestId("initial-stock-btn-prod-7")).toBeNull();
+    });
+
+    it("16. Clicking Opening Stock button opens RestockModal in initial mode with 'Opening Stock' heading", () => {
+      const onInitialStockMock = vi.fn();
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={5}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={true}
+          onInitialStockClick={onInitialStockMock}
+          slug={mockSlug}
+        />
+      );
+
+      // Modal closed initially
+      expect(screen.queryByTestId("restock-modal")).toBeNull();
+
+      // Click Opening Stock on prod-3
+      const initialBtn = screen.getByTestId("initial-stock-btn-prod-3");
+      fireEvent.click(initialBtn);
+
+      expect(onInitialStockMock).toHaveBeenCalledWith(mockItems[2]);
+
+      // Modal opens in initial mode
+      const modal = screen.getByTestId("restock-modal");
+      expect(modal).toBeInTheDocument();
+      expect(within(modal).getByRole("heading", { name: "Opening Stock" })).toBeInTheDocument();
+      expect(within(modal).getByText("Paper Coffee Filters #4")).toBeInTheDocument();
+      expect(within(modal).getByText(/Record initial baseline inventory/i)).toBeInTheDocument();
+      expect(within(modal).getByRole("button", { name: /confirm opening stock/i })).toBeInTheDocument();
+    });
+
+    it("17. Existing Restock button visibility and behavior remain unchanged alongside Initial Stock button", () => {
+      render(
+        <InventoryTable
+          items={mockItems}
+          totalCount={5}
+          page={1}
+          pageSize={20}
+          totalPages={1}
+          canViewValuation={false}
+          canReceiveStock={true}
+          slug={mockSlug}
+        />
+      );
+
+      // Restock button is still available on active products (prod-1, prod-2, prod-3, prod-5)
+      expect(screen.getByTestId("restock-btn-prod-1")).toBeInTheDocument();
+      expect(screen.getByTestId("restock-btn-prod-2")).toBeInTheDocument();
+      expect(screen.getByTestId("restock-btn-prod-3")).toBeInTheDocument();
+      expect(screen.getByTestId("restock-btn-prod-5")).toBeInTheDocument();
+
+      // But prod-4 (archived) has neither
+      expect(screen.queryByTestId("restock-btn-prod-4")).toBeNull();
+      expect(screen.queryByTestId("initial-stock-btn-prod-4")).toBeNull();
+    });
   });
 });
 

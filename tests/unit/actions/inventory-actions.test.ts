@@ -87,6 +87,7 @@ describe("T017: Inventory Server Actions Unit Tests", () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       neq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
       lte: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
@@ -483,6 +484,53 @@ describe("T017: Inventory Server Actions Unit Tests", () => {
       if (res.success) {
         expect(res.data.items.length).toBe(1);
         expect(res.data.items[0]?.productName).toBe("Organic Apple Juice");
+      }
+    });
+
+    it("correctly evaluates hasInitialMovement: true for products with non-initial movement history, false when no movements exist", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      const mockData = [
+        {
+          product_id: "prod-zero-clean",
+          quantity: "0.0000",
+          reorder_point: "5.0000",
+          reorder_quantity: null,
+          version: 1,
+          products: { id: "prod-zero-clean", name: "Fresh Product", sku: "FSH-001", barcode: null, status: "active", unit_of_measure: "piece" },
+        },
+        {
+          product_id: "prod-zero-with-history",
+          quantity: "0.0000",
+          reorder_point: "5.0000",
+          reorder_quantity: null,
+          version: 2,
+          products: { id: "prod-zero-with-history", name: "Depleted Product", sku: "DPL-002", barcode: null, status: "active", unit_of_measure: "piece" },
+        },
+      ];
+
+      const invBuilder = createMockQueryBuilder(mockData);
+      const mvtBuilder = createMockQueryBuilder([{ product_id: "prod-zero-with-history" }]);
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        from: vi.fn().mockImplementation((table: string) => {
+          if (table === "inventory") return invBuilder;
+          if (table === "stock_movements") return mvtBuilder;
+          return createMockQueryBuilder();
+        }),
+      } as any);
+
+      const res = await getInventoryListAction(mockSlug, {});
+      expect(res.success).toBe(true);
+      if (res.success) {
+        const cleanProd = res.data.items.find((i) => i.productId === "prod-zero-clean");
+        const historyProd = res.data.items.find((i) => i.productId === "prod-zero-with-history");
+
+        expect(cleanProd?.hasInitialMovement).toBe(false);
+        expect(historyProd?.hasInitialMovement).toBe(true);
       }
     });
   });
@@ -921,6 +969,223 @@ describe("T017: Inventory Server Actions Unit Tests", () => {
       expect(res.success).toBe(false);
       if (!res.success) {
         expect(res.error.code).toBe("INVALID_QUANTITY_SEMANTICS");
+      }
+    });
+
+    // ==========================================================================
+    // T025: Initial Opening Stock Server Action Tests (US3, P0025, P0026)
+    // ==========================================================================
+    it("T025: successfully records initial opening stock movement and invokes execute_stock_movement", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: {
+          success: true,
+          is_replay: false,
+          status: "committed",
+          movement_id: "init-mov-001",
+          product_id: mockProductId,
+          quantity_before: "0.0000",
+          quantity_delta: "35.0000",
+          quantity_after: "35.0000",
+          current_stock: "35.0000",
+          version: 1,
+        },
+        error: null,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: mockRpc,
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { unit_of_measure: "piece" },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      } as any);
+
+      const res = await recordStockMovementAction(mockSlug, {
+        productId: mockProductId,
+        movementType: "initial",
+        quantity: 35,
+        reason: "Initial physical inventory setup",
+        referenceId: "COUNT-001",
+      });
+
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.movementId).toBe("init-mov-001");
+        expect(res.data.quantityAfter).toBe(35);
+      }
+
+      expect(mockRpc).toHaveBeenCalledWith("execute_stock_movement", expect.objectContaining({
+        p_movement_type: "initial",
+        p_quantity: 35,
+      }));
+    });
+
+    it("T025: maps RPC P0025 error to canonical INITIAL_STOCK_ALREADY_RECORDED", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: "P0025", message: "INITIAL_STOCK_ALREADY_RECORDED" },
+        }),
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { unit_of_measure: "box" },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      } as any);
+
+      const res = await recordStockMovementAction(mockSlug, {
+        productId: mockProductId,
+        movementType: "initial",
+        quantity: 10,
+        reason: "Duplicate initial stock attempt",
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.code).toBe("INITIAL_STOCK_ALREADY_RECORDED");
+        expect(res.error.message).toMatch(/already been established/i);
+      }
+    });
+
+    it("T025: reconciles INITIAL_STOCK_ALREADY_ESTABLISHED database message to canonical INITIAL_STOCK_ALREADY_RECORDED", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: "P0025", message: "INITIAL_STOCK_ALREADY_ESTABLISHED: Initial stock already recorded" },
+        }),
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { unit_of_measure: "box" },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      } as any);
+
+      const res = await recordStockMovementAction(mockSlug, {
+        productId: mockProductId,
+        movementType: "initial",
+        quantity: 10,
+        reason: "Duplicate initial stock attempt",
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.code).toBe("INITIAL_STOCK_ALREADY_RECORDED");
+      }
+    });
+
+    it("T025: maps uq_stock_movements_initial_per_product unique violation (23505) to INITIAL_STOCK_ALREADY_RECORDED", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: {
+            code: "23505",
+            message: "duplicate key value violates unique constraint \"uq_stock_movements_initial_per_product\"",
+          },
+        }),
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { unit_of_measure: "box" },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      } as any);
+
+      const res = await recordStockMovementAction(mockSlug, {
+        productId: mockProductId,
+        movementType: "initial",
+        quantity: 10,
+        reason: "Concurrent duplicate initial stock attempt",
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.code).toBe("INITIAL_STOCK_ALREADY_RECORDED");
+      }
+    });
+
+    it("T025: maps RPC P0026 error to INITIAL_STOCK_NOT_PERMITTED_HISTORY_EXISTS", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: "P0026", message: "Opening stock cannot be recorded after movement history exists." },
+        }),
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { unit_of_measure: "box" },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      } as any);
+
+      const res = await recordStockMovementAction(mockSlug, {
+        productId: mockProductId,
+        movementType: "initial",
+        quantity: 10,
+        reason: "Initial stock attempted when movements already exist",
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.code).toBe("INITIAL_STOCK_NOT_PERMITTED_HISTORY_EXISTS");
       }
     });
 

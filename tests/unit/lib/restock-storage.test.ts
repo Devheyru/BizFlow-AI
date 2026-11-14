@@ -17,6 +17,44 @@ describe("Restock Storage Utility (Verification C, FINDING-P5-002)", () => {
 
   it("generates predictable storage key", () => {
     expect(getPendingRestockKey(slug, productId)).toBe(`bizflow_restock_pending_${slug}_${productId}`);
+    expect(getPendingRestockKey(slug, productId, "restock")).toBe(`bizflow_restock_pending_${slug}_${productId}`);
+    expect(getPendingRestockKey(slug, productId, "initial")).toBe(`bizflow_restock_pending_${slug}_${productId}_initial`);
+  });
+
+  it("partitions pending sessions between restock and initial modes", () => {
+    const restockSession: PendingRestockSession = {
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
+      slug,
+      productId,
+      quantity: 50,
+      reason: "Supplier delivery",
+      referenceId: "PO-100",
+      expectedVersion: 1,
+      createdAt: Date.now(),
+      mode: "restock",
+    };
+
+    const initialSession: PendingRestockSession = {
+      idempotencyKey: "22222222-2222-4222-8222-222222222222",
+      slug,
+      productId,
+      quantity: 100,
+      reason: "Opening inventory baseline",
+      referenceId: "AUDIT-001",
+      expectedVersion: 1,
+      createdAt: Date.now(),
+      mode: "initial",
+    };
+
+    savePendingRestock(restockSession);
+    savePendingRestock(initialSession);
+
+    expect(loadPendingRestock(slug, productId, "restock")).toEqual(restockSession);
+    expect(loadPendingRestock(slug, productId, "initial")).toEqual(initialSession);
+
+    clearPendingRestock(slug, productId, "initial");
+    expect(loadPendingRestock(slug, productId, "initial")).toBeNull();
+    expect(loadPendingRestock(slug, productId, "restock")).toEqual(restockSession);
   });
 
   it("saves and loads pending restock session", () => {
