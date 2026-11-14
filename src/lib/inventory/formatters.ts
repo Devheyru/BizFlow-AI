@@ -58,6 +58,36 @@ export function formatQuantityWithUom(
 }
 
 /**
+ * Maps ISO 4217 currency code to its decimal exponent.
+ * Matches public.get_currency_exponent stored procedure.
+ */
+export function getCurrencyExponent(currency: string = "USD"): number {
+  switch (currency.toUpperCase().trim()) {
+    case "JPY":
+    case "KRW":
+    case "VND":
+    case "CLP":
+    case "PYG":
+    case "UGX":
+    case "RWF":
+      return 0;
+    case "BHD":
+    case "KWD":
+    case "OMR":
+    case "JOD":
+    case "TND":
+    case "LYD":
+    case "IQD":
+      return 3;
+    case "CLF":
+    case "UYW":
+      return 4;
+    default:
+      return 2;
+  }
+}
+
+/**
  * Formats a monetary amount into a localized currency string.
  * Defaults to USD if currency is not provided.
  */
@@ -73,15 +103,16 @@ export function formatCurrency(
     return "$0.00";
   }
 
+  const exponent = getCurrencyExponent(currency);
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency.toUpperCase(),
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: exponent,
+      maximumFractionDigits: exponent,
     }).format(num);
   } catch {
-    return `$${num.toFixed(2)}`;
+    return `$${num.toFixed(exponent)}`;
   }
 }
 

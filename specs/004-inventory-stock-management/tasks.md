@@ -150,8 +150,8 @@
 
 ### Implementation for User Story 6
 
-- [ ] T033 [US6] Wire `reorder-threshold-modal` trigger into `inventory-table.tsx` action column (visible when `inventory:adjust` present; pre-fills current `reorder_point`, `reorder_quantity`, and `version`)
-- [ ] T034 [US6] Add low-stock badge logic to `inventory-table.tsx` (badge renders when `quantity > 0 AND quantity <= reorder_point`; `Out of Stock` badge when `quantity = 0`; badge tooltip shows configured reorder threshold value)
+- [X] T033 [US6] Wire `reorder-threshold-modal` trigger into `inventory-table.tsx` action column (visible when `inventory:adjust` present; pre-fills current `reorder_point`, `reorder_quantity`, and `version`)
+- [X] T034 [US6] Add low-stock badge logic to `inventory-table.tsx` (badge renders when `quantity > 0 AND quantity <= reorder_point`; `Out of Stock` badge when `quantity = 0`; badge tooltip shows configured reorder threshold value)
 
 **Checkpoint**: US6 fully functional. Threshold configuration and badge display independently verifiable.
 

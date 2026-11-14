@@ -21,6 +21,7 @@ import {
   calculateStockStatus,
   getStockStatusPriority,
   isDiscreteUom,
+  getCurrencyExponent,
 } from "@/lib/inventory/formatters";
 import type { ActionResult } from "@/types/auth";
 import type {
@@ -34,6 +35,8 @@ import type {
   MovementHistoryRow,
   MovementType,
   RawStockMutationRpcResult,
+  InventoryValuationSummaryData,
+  InventoryValuationItem,
 } from "@/types/inventory";
 
 // ============================================================================
@@ -1213,6 +1216,180 @@ export async function getMovementHistoryAction(
         page: query.page,
         pageSize: query.pageSize,
         totalPages,
+      },
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error occurred.";
+    return { success: false, error: { code: "INTERNAL_ERROR", message } };
+  }
+}
+
+// ============================================================================
+// 7. getInventoryValuationSummaryAction (T034, Phase 9)
+// ============================================================================
+/**
+ * Retrieves full organization inventory valuation summary metrics and line-item breakdown.
+ * - Enforces dual-permission (`inventory:read_valuation` AND `products:read_cost`).
+ * - When caller lacks either permission, fails closed with FORBIDDEN error.
+ * - Calculated using full-precision replacement costs from `public.product_costs`.
+ * - Products without cost records are tracked in `unvaluedProductsCount` and omitted from the monetary total.
+ * - Sum rounded once at the end according to currency exponent.
+ */
+export async function getInventoryValuationSummaryAction(
+  slug: string,
+  includeArchived: boolean = false
+): Promise<ActionResult<InventoryValuationSummaryData>> {
+  try {
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: { code: tenantRes.error.toUpperCase(), message: "Organization not found or access denied." },
+      };
+    }
+    const { context } = tenantRes;
+
+    // Strict dual-permission enforcement: requires BOTH inventory:read_valuation AND products:read_cost
+    if (!canViewValuation(context)) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthorized: inventory valuation access requires both inventory:read_valuation and products:read_cost permissions.",
+        },
+      };
+    }
+
+    const supabase = await createClient();
+
+    let query = supabase
+      .from("inventory")
+      .select(`
+        id,
+        quantity,
+        reorder_point,
+        products!inner (
+          id,
+          name,
+          sku,
+          status,
+          unit_of_measure,
+          category_id,
+          product_categories (
+            name
+          ),
+          product_costs (
+            cost_price
+          )
+        )
+      `)
+      .eq("organization_id", context.organization.id);
+
+    if (!includeArchived) {
+      query = query.neq("products.status", "archived");
+    }
+
+    const { data: rows, error } = await query;
+
+    if (error) {
+      return { success: false, error: mapDatabaseError(error) };
+    }
+
+    let valuedProductsCount = 0;
+    let unvaluedProductsCount = 0;
+    let zeroStockValuedProductsCount = 0;
+    let totalValuationAmount = 0;
+
+    interface ValuationRawRow {
+      id: string;
+      quantity: number | string;
+      reorder_point: number | string | null;
+      products: {
+        id: string;
+        name: string;
+        sku: string;
+        status: string;
+        unit_of_measure: string;
+        category_id: string | null;
+        product_categories?: { name: string } | null;
+        product_costs?: { cost_price: number | string } | { cost_price: number | string }[] | null;
+      };
+    }
+
+    const rawRows = (rows || []) as unknown as ValuationRawRow[];
+    const currency = context.organization.currency || "USD";
+
+    const items: InventoryValuationItem[] = rawRows.map((row) => {
+      const p = row.products;
+      const qty = parseFloat(String(row.quantity)) || 0;
+      const rp = row.reorder_point !== null && row.reorder_point !== undefined ? parseFloat(String(row.reorder_point)) : null;
+      const stockStatus = calculateStockStatus(qty, rp);
+      const isDiscrete = isDiscreteUom(p.unit_of_measure);
+
+      let costPrice: number | null = null;
+      if (p.product_costs) {
+        if (Array.isArray(p.product_costs) && p.product_costs.length > 0) {
+          const rawCost = p.product_costs[0]?.cost_price;
+          if (rawCost !== null && rawCost !== undefined) {
+            costPrice = parseFloat(String(rawCost));
+          }
+        } else if (!Array.isArray(p.product_costs)) {
+          const rawCost = p.product_costs.cost_price;
+          if (rawCost !== null && rawCost !== undefined) {
+            costPrice = parseFloat(String(rawCost));
+          }
+        }
+      }
+
+      let lineValuation: number | null = null;
+      if (costPrice !== null && !isNaN(costPrice)) {
+        valuedProductsCount++;
+        if (qty <= 0) {
+          zeroStockValuedProductsCount++;
+        }
+        if (qty > 0) {
+          // Full-precision calculation without binary floating-point drift
+          lineValuation = Math.round(qty * costPrice * 10000) / 10000;
+          totalValuationAmount += lineValuation;
+        } else {
+          lineValuation = 0;
+        }
+      } else {
+        unvaluedProductsCount++;
+      }
+
+      return {
+        productId: p.id,
+        productName: p.name,
+        sku: p.sku,
+        categoryName: p.product_categories?.name || null,
+        quantity: qty,
+        unitOfMeasure: p.unit_of_measure,
+        isDiscrete,
+        costPrice,
+        lineValuation,
+        currency,
+        stockStatus,
+      };
+    });
+
+    const exponent = getCurrencyExponent(currency);
+    const factor = Math.pow(10, exponent);
+    const roundedTotal = Math.round(totalValuationAmount * factor) / factor;
+
+    return {
+      success: true,
+      data: {
+        totalValuation: {
+          amount: roundedTotal,
+          currency,
+          formatted: formatCurrency(roundedTotal, currency),
+        },
+        totalTrackedProducts: rawRows.length,
+        valuedProductsCount,
+        unvaluedProductsCount,
+        zeroStockValuedProductsCount,
+        items,
       },
     };
   } catch (err: unknown) {
