@@ -31,8 +31,9 @@ export const stockMovementInputSchema = z
     quantity: z
       .number({ invalid_type_error: "Quantity must be a valid number" })
       .finite({ message: "Quantity must be a finite number" })
+      .min(-MAX_QUANTITY, { message: `Quantity cannot be less than -${MAX_QUANTITY}` })
       .max(MAX_QUANTITY, { message: `Quantity cannot exceed ${MAX_QUANTITY}` })
-      .refine(hasMaxFourDecimals, {
+      .refine((val) => hasMaxFourDecimals(Math.abs(val)), {
         message: "Quantity cannot exceed 4 decimal places",
       }),
     reason: z
@@ -72,12 +73,29 @@ export const stockMovementInputSchema = z
       if (data.quantitySemantics === "target_physical_count") {
         return data.movementType === "adjustment" && data.quantity >= 0;
       }
-      // Semantics: quantity_delta must be strictly positive
-      return data.quantity >= MIN_POSITIVE_QUANTITY;
+      // Semantics: quantity_delta rules per movement type
+      if (data.movementType === "restock") {
+        return data.quantity >= MIN_POSITIVE_QUANTITY;
+      }
+      if (data.movementType === "initial") {
+        return data.quantity >= 0;
+      }
+      if (data.movementType === "adjustment") {
+        return data.quantity !== 0;
+      }
+      // For damage, loss, internal_use: single unambiguous signed-delta API requires negative delta (< 0)
+      if (
+        data.movementType === "damage" ||
+        data.movementType === "loss" ||
+        data.movementType === "internal_use"
+      ) {
+        return data.quantity <= -MIN_POSITIVE_QUANTITY;
+      }
+      return false;
     },
     {
       message:
-        "Target physical count is permitted only for adjustments and must be non-negative; delta quantities must be strictly positive",
+        "Target physical count is permitted only for adjustments and must be non-negative; write-offs (damage, loss, internal use) require a negative quantity delta; restock requires a positive delta; adjustments cannot be zero",
       path: ["quantitySemantics"],
     }
   );
