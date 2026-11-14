@@ -13,6 +13,7 @@ import {
   PackagePlus,
   SlidersHorizontal,
   Target,
+  ClipboardCheck,
 } from "lucide-react";
 import type { InventoryItemRow } from "@/types/inventory";
 import {
@@ -23,6 +24,9 @@ import {
 } from "@/lib/inventory/formatters";
 import { Button } from "@/components/ui/button";
 import { RestockModal } from "@/components/inventory/restock-modal";
+import { AdjustStockModal } from "@/components/inventory/adjust-stock-modal";
+import { StocktakeModal } from "@/components/inventory/stocktake-modal";
+import { ReorderThresholdModal } from "@/components/inventory/reorder-threshold-modal";
 
 export type InventorySortField = "name" | "sku" | "quantity" | "stock_status";
 export type SortDirection = "asc" | "desc";
@@ -49,6 +53,7 @@ export interface InventoryTableProps {
   onRestockClick?: (item: InventoryItemRow) => void;
   onInitialStockClick?: (item: InventoryItemRow) => void;
   onAdjustClick?: (item: InventoryItemRow) => void;
+  onStocktakeClick?: (item: InventoryItemRow) => void;
   onThresholdClick?: (item: InventoryItemRow) => void;
 }
 
@@ -82,6 +87,7 @@ export function InventoryTable({
   onRestockClick,
   onInitialStockClick,
   onAdjustClick,
+  onStocktakeClick,
   onThresholdClick,
 }: InventoryTableProps) {
   const router = useRouter();
@@ -89,6 +95,9 @@ export function InventoryTable({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [restockItem, setRestockItem] = useState<InventoryItemRow | null>(null);
+  const [adjustItem, setAdjustItem] = useState<InventoryItemRow | null>(null);
+  const [stocktakeItem, setStocktakeItem] = useState<InventoryItemRow | null>(null);
+  const [thresholdItem, setThresholdItem] = useState<InventoryItemRow | null>(null);
   const [modalMode, setModalMode] = useState<"restock" | "initial">("restock");
 
   // Handle column header sorting
@@ -537,14 +546,17 @@ export function InventoryTable({
                         </Button>
                       )}
 
-                      {/* Adjust trigger slot (US4 wiring ready) */}
-                      {canAdjustStock && Boolean(onAdjustClick) && item.productStatus !== "archived" && (
+                      {/* Adjust trigger slot (T026, T030, US4) */}
+                      {canAdjustStock && item.productStatus !== "archived" && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="h-8 px-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                          onClick={() => onAdjustClick?.(item)}
+                          onClick={() => {
+                            setAdjustItem(item);
+                            onAdjustClick?.(item);
+                          }}
                           title="Adjust Stock"
                           data-testid={`adjust-btn-${item.productId}`}
                         >
@@ -553,14 +565,36 @@ export function InventoryTable({
                         </Button>
                       )}
 
-                      {/* Thresholds trigger slot (US4 wiring ready) */}
-                      {canAdjustStock && Boolean(onThresholdClick) && (
+                      {/* Stocktake trigger slot (T027, T030, US4) */}
+                      {canAdjustStock && item.productStatus !== "archived" && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                          onClick={() => {
+                            setStocktakeItem(item);
+                            onStocktakeClick?.(item);
+                          }}
+                          title="Cycle Count / Stocktake"
+                          data-testid={`stocktake-btn-${item.productId}`}
+                        >
+                          <ClipboardCheck className="h-4 w-4" />
+                          <span className="hidden md:inline ml-1 text-xs">Count</span>
+                        </Button>
+                      )}
+
+                      {/* Thresholds trigger slot (T029, T030, US4) */}
+                      {canAdjustStock && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="h-8 px-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
-                          onClick={() => onThresholdClick?.(item)}
+                          onClick={() => {
+                            setThresholdItem(item);
+                            onThresholdClick?.(item);
+                          }}
                           title="Configure Reorder Thresholds"
                           data-testid={`thresholds-btn-${item.productId}`}
                         >
@@ -685,6 +719,76 @@ export function InventoryTable({
           canReceiveStock={canReceiveStock}
           mode={modalMode}
           onRestockSuccess={(_result) => {
+            startTransition(() => {
+              router.refresh();
+            });
+          }}
+        />
+      )}
+
+      {/* Adjust Stock Modal (T026, T030, US4) */}
+      {adjustItem && (
+        <AdjustStockModal
+          isOpen={Boolean(adjustItem)}
+          onClose={() => setAdjustItem(null)}
+          slug={slug}
+          productId={adjustItem.productId}
+          productName={adjustItem.productName}
+          sku={adjustItem.sku}
+          currentStock={adjustItem.quantity}
+          currentVersion={adjustItem.version}
+          unitOfMeasure={adjustItem.unitOfMeasure}
+          isDiscrete={adjustItem.isDiscrete}
+          productStatus={adjustItem.productStatus}
+          canAdjustStock={canAdjustStock}
+          onAdjustmentSuccess={(_result) => {
+            startTransition(() => {
+              router.refresh();
+            });
+          }}
+        />
+      )}
+
+      {/* Stocktake Modal (T027, T030, US4) */}
+      {stocktakeItem && (
+        <StocktakeModal
+          isOpen={Boolean(stocktakeItem)}
+          onClose={() => setStocktakeItem(null)}
+          slug={slug}
+          productId={stocktakeItem.productId}
+          productName={stocktakeItem.productName}
+          sku={stocktakeItem.sku}
+          currentStock={stocktakeItem.quantity}
+          currentVersion={stocktakeItem.version}
+          unitOfMeasure={stocktakeItem.unitOfMeasure}
+          isDiscrete={stocktakeItem.isDiscrete}
+          productStatus={stocktakeItem.productStatus}
+          canAdjustStock={canAdjustStock}
+          onStocktakeSuccess={(_result) => {
+            startTransition(() => {
+              router.refresh();
+            });
+          }}
+        />
+      )}
+
+      {/* Reorder Threshold Modal (T029, T030, US4) */}
+      {thresholdItem && (
+        <ReorderThresholdModal
+          isOpen={Boolean(thresholdItem)}
+          onClose={() => setThresholdItem(null)}
+          slug={slug}
+          productId={thresholdItem.productId}
+          productName={thresholdItem.productName}
+          sku={thresholdItem.sku}
+          currentStock={thresholdItem.quantity}
+          currentVersion={thresholdItem.version}
+          unitOfMeasure={thresholdItem.unitOfMeasure}
+          isDiscrete={thresholdItem.isDiscrete}
+          currentReorderPoint={thresholdItem.reorderPoint}
+          currentReorderQuantity={thresholdItem.reorderQuantity}
+          canAdjustStock={canAdjustStock}
+          onThresholdsSuccess={(_result) => {
             startTransition(() => {
               router.refresh();
             });

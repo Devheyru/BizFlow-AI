@@ -174,6 +174,89 @@ describe("T014: Inventory Validation Schemas", () => {
       expect(stockMovementInputSchema.safeParse(fiveDecimals).success).toBe(false);
     });
 
+    it("enforces signed-delta API: accepts negative delta and rejects positive magnitude for write-offs", () => {
+      const validDamage = {
+        productId: validProductId,
+        movementType: "damage",
+        quantity: -5,
+        reason: "Broken mug during transit",
+        quantitySemantics: "quantity_delta",
+      };
+      const validLoss = {
+        productId: validProductId,
+        movementType: "loss",
+        quantity: -2.5,
+        reason: "Evaporation loss",
+        quantitySemantics: "quantity_delta",
+      };
+      const validInternalUse = {
+        productId: validProductId,
+        movementType: "internal_use",
+        quantity: -1,
+        reason: "Store kitchen allocation",
+        quantitySemantics: "quantity_delta",
+      };
+
+      expect(stockMovementInputSchema.safeParse(validDamage).success).toBe(true);
+      expect(stockMovementInputSchema.safeParse(validLoss).success).toBe(true);
+      expect(stockMovementInputSchema.safeParse(validInternalUse).success).toBe(true);
+
+      // Rejects positive magnitude for write-offs
+      const positiveDamage = {
+        productId: validProductId,
+        movementType: "damage",
+        quantity: 5,
+        reason: "Positive magnitude damage attempt",
+        quantitySemantics: "quantity_delta",
+      };
+      const positiveLoss = {
+        productId: validProductId,
+        movementType: "loss",
+        quantity: 2.5,
+        reason: "Positive magnitude loss attempt",
+        quantitySemantics: "quantity_delta",
+      };
+      const positiveInternalUse = {
+        productId: validProductId,
+        movementType: "internal_use",
+        quantity: 1,
+        reason: "Positive magnitude internal use attempt",
+        quantitySemantics: "quantity_delta",
+      };
+
+      expect(stockMovementInputSchema.safeParse(positiveDamage).success).toBe(false);
+      expect(stockMovementInputSchema.safeParse(positiveLoss).success).toBe(false);
+      expect(stockMovementInputSchema.safeParse(positiveInternalUse).success).toBe(false);
+    });
+
+    it("accepts positive and negative deltas for manual adjustments and rejects zero", () => {
+      const positiveAdj = {
+        productId: validProductId,
+        movementType: "adjustment",
+        quantity: 4.5,
+        reason: "Found surplus inventory",
+        quantitySemantics: "quantity_delta",
+      };
+      const negativeAdj = {
+        productId: validProductId,
+        movementType: "adjustment",
+        quantity: -3,
+        reason: "Routine reconciliation deduction",
+        quantitySemantics: "quantity_delta",
+      };
+      const zeroAdj = {
+        productId: validProductId,
+        movementType: "adjustment",
+        quantity: 0,
+        reason: "Zero delta adjustment attempt",
+        quantitySemantics: "quantity_delta",
+      };
+
+      expect(stockMovementInputSchema.safeParse(positiveAdj).success).toBe(true);
+      expect(stockMovementInputSchema.safeParse(negativeAdj).success).toBe(true);
+      expect(stockMovementInputSchema.safeParse(zeroAdj).success).toBe(false);
+    });
+
     it("enforces reason length bounds (min 3, max 500 characters)", () => {
       const tooShort = {
         productId: validProductId,

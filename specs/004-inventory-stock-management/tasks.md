@@ -117,11 +117,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T026 [P] [US4] Create `src/components/inventory/adjust-stock-modal.tsx` (movement type selector: `damage` / `loss` / `internal_use` / `adjustment` delta mode; reason field required; `quantity_semantics: 'quantity_delta'` for all modes; surfaces `PRODUCT_INACTIVE_INTERNAL_USE_BLOCKED` (HTTP 422) for `internal_use` on inactive products; surfaces `INSUFFICIENT_STOCK` on over-deduction; requires `inventory:adjust` permission)
-- [ ] T027 [P] [US4] Create `src/components/inventory/stocktake-modal.tsx` (physical count input with live difference preview `target - current`; `movement_type: 'adjustment'`, `quantity_semantics: 'target_physical_count'`; calls `recordStockMovementAction`; handles `status: 'matched'` zero-delta response displaying `matched_quantity` and `current_stock`; requires `inventory:adjust` permission)
-- [ ] T028 [US4] Create `src/app/[slug]/inventory/stocktake/page.tsx` (cycle-count workflow page; lists all products with current stock; embeds `stocktake-modal` trigger per row; accessible via inventory dashboard action)
-- [ ] T029 [P] [US4] Create `src/components/inventory/reorder-threshold-modal.tsx` (reorder point and replenishment quantity inputs; non-negative validation; passes `expected_version` for OCC; calls `updateInventoryThresholdsAction`; surfaces `STALE_VERSION_CONFLICT` on concurrent update; requires `inventory:adjust` permission)
-- [ ] T030 [US4] Wire adjustment and stocktake modal trigger buttons into `inventory-table.tsx` action column (visible only when `inventory:adjust` permission present)
+- [X] T026 [P] [US4] Create `src/components/inventory/adjust-stock-modal.tsx` (movement type selector: `damage` / `loss` / `internal_use` / `adjustment` delta mode; reason field required; `quantity_semantics: 'quantity_delta'` for all modes; surfaces `PRODUCT_INACTIVE_INTERNAL_USE_BLOCKED` (HTTP 422) for `internal_use` on inactive products; surfaces `INSUFFICIENT_STOCK` on over-deduction; requires `inventory:adjust` permission)
+- [X] T027 [P] [US4] Create `src/components/inventory/stocktake-modal.tsx` (physical count input with live difference preview `target - current`; `movement_type: 'adjustment'`, `quantity_semantics: 'target_physical_count'`; calls `recordStockMovementAction`; handles `status: 'matched'` zero-delta response displaying `matched_quantity` and `current_stock`; requires `inventory:adjust` permission)
+- [X] T028 [US4] Create `src/app/[slug]/inventory/stocktake/page.tsx` (cycle-count workflow page; lists all products with current stock; embeds `stocktake-modal` trigger per row; accessible via inventory dashboard action)
+- [X] T029 [P] [US4] Create `src/components/inventory/reorder-threshold-modal.tsx` (reorder point and replenishment quantity inputs; non-negative validation; passes `expected_version` for OCC; calls `updateInventoryThresholdsAction`; surfaces `STALE_VERSION_CONFLICT` on concurrent update; requires `inventory:adjust` permission)
+- [X] T030 [US4] Wire adjustment and stocktake modal trigger buttons into `inventory-table.tsx` action column (visible only when `inventory:adjust` permission present)
 
 **Checkpoint**: US4 fully functional. All adjustment and stocktake flows independently verifiable.
 
