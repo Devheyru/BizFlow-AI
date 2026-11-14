@@ -412,3 +412,38 @@ export interface MovementHistoryQueryFilters {
 
 export type MovementHistoryQueryInput = MovementHistoryQueryFilters;
 
+/**
+ * Detailed inventory valuation line item.
+ * Protected: requires BOTH inventory:read_valuation AND products:read_cost.
+ */
+export interface InventoryValuationItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  categoryName: string | null;
+  quantity: number;
+  unitOfMeasure: string;
+  isDiscrete: boolean;
+  costPrice: number | null; // null if unvalued (missing from product_costs)
+  lineValuation: number | null; // null if unvalued, otherwise quantity * costPrice
+  currency: string;
+  stockStatus: StockStatus;
+}
+
+/**
+ * Full organization-level inventory valuation summary dataset.
+ * Protected: requires BOTH inventory:read_valuation AND products:read_cost.
+ */
+export interface InventoryValuationSummaryData {
+  totalValuation: {
+    amount: number;
+    currency: string;
+    formatted: string;
+  };
+  totalTrackedProducts: number;
+  valuedProductsCount: number;
+  unvaluedProductsCount: number;
+  zeroStockValuedProductsCount: number;
+  items: InventoryValuationItem[];
+}
+

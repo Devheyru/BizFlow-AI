@@ -193,10 +193,22 @@ export function InventoryTable({
         ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-800"
         : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-800";
 
+    const tooltipText =
+      item.stockStatus === "out_of_stock"
+        ? "Out of Stock (0 on hand)"
+        : item.stockStatus === "low_stock"
+        ? item.reorderPoint !== null
+          ? `Low Stock: ${formatStockQuantity(item.quantity, item.isDiscrete)} ${item.unitOfMeasure} on hand (Reorder threshold: ${formatStockQuantity(item.reorderPoint, item.isDiscrete)} ${item.unitOfMeasure})`
+          : "Low Stock: on-hand stock is at or below reorder threshold"
+        : item.reorderPoint !== null
+        ? `In Stock: ${formatStockQuantity(item.quantity, item.isDiscrete)} ${item.unitOfMeasure} on hand (Reorder threshold: ${formatStockQuantity(item.reorderPoint, item.isDiscrete)} ${item.unitOfMeasure})`
+        : "In Stock";
+
     return (
       <span
         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${colorClasses}`}
         data-testid={`stock-status-badge-${item.productId}`}
+        title={tooltipText}
       >
         {variant === "destructive" && (
           <span className="h-1.5 w-1.5 rounded-full bg-red-500" />

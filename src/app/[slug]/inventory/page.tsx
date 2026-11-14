@@ -25,7 +25,7 @@ import type {
   StockStatusFilter,
   ProductStatusFilter,
 } from "@/types/inventory";
-import { History, ClipboardCheck, AlertCircle } from "lucide-react";
+import { History, ClipboardCheck, AlertCircle, DollarSign } from "lucide-react";
 
 interface InventoryPageProps {
   params: Promise<{ slug: string }>;
@@ -175,6 +175,17 @@ export default async function InventoryPage({
             >
               <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
               <span>Stocktake</span>
+            </Link>
+          )}
+
+          {canViewValuationProp && (
+            <Link
+              href={`/${slug}/inventory/valuation`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors shadow-sm"
+              data-testid="link-valuation-summary"
+            >
+              <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <span>Valuation Summary</span>
             </Link>
           )}
         </div>

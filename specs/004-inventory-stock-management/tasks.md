@@ -135,8 +135,8 @@
 
 ### Implementation for User Story 5
 
-- [ ] T031 [US5] Create `src/app/[slug]/inventory/history/page.tsx` (RSC; calls `getMovementHistoryAction` with query params; composes `movement-history-table` with filter controls; requires `inventory:history` permission; computes combined valuation permission server-side — passes `canViewValuation` boolean (true only when caller holds BOTH `inventory:read_valuation` AND `products:read_cost`) to the history table; `getMovementHistoryAction` strips acquisition-cost fields from the response payload when `canViewValuation` is false, so cost data never reaches the client for unauthorized callers)
-- [ ] T032 [US5] Create `src/components/inventory/movement-history-table.tsx` (filterable ledger table: product name, movement type badge, quantity delta with sign, reason, reference, performed by, timestamp; unit cost and total cost columns rendered only when `canViewValuation` prop is true — this is a server-computed boolean requiring BOTH `inventory:read_valuation` AND `products:read_cost`; component never re-evaluates permissions; because `getMovementHistoryAction` already strips cost fields server-side, absence of data is the primary guard — UI visibility is a secondary UX concern only; pagination and date-range filter controls)
+- [X] T031 [US5] Create `src/app/[slug]/inventory/history/page.tsx` (RSC; calls `getMovementHistoryAction` with query params; composes `movement-history-table` with filter controls; requires `inventory:history` permission; computes combined valuation permission server-side — passes `canViewValuation` boolean (true only when caller holds BOTH `inventory:read_valuation` AND `products:read_cost`) to the history table; `getMovementHistoryAction` strips acquisition-cost fields from the response payload when `canViewValuation` is false, so cost data never reaches the client for unauthorized callers)
+- [X] T032 [US5] Create `src/components/inventory/movement-history-table.tsx` (filterable ledger table: product name, movement type badge, quantity delta with sign, reason, reference, performed by, timestamp; unit cost and total cost columns rendered only when `canViewValuation` prop is true — this is a server-computed boolean requiring BOTH `inventory:read_valuation` AND `products:read_cost`; component never re-evaluates permissions; because `getMovementHistoryAction` already strips cost fields server-side, absence of data is the primary guard — UI visibility is a secondary UX concern only; pagination and date-range filter controls)
 
 **Checkpoint**: US5 fully functional. History ledger and valuation protection independently verifiable.
 
@@ -150,8 +150,8 @@
 
 ### Implementation for User Story 6
 
-- [ ] T033 [US6] Wire `reorder-threshold-modal` trigger into `inventory-table.tsx` action column (visible when `inventory:adjust` present; pre-fills current `reorder_point`, `reorder_quantity`, and `version`)
-- [ ] T034 [US6] Add low-stock badge logic to `inventory-table.tsx` (badge renders when `quantity > 0 AND quantity <= reorder_point`; `Out of Stock` badge when `quantity = 0`; badge tooltip shows configured reorder threshold value)
+- [X] T033 [US6] Wire `reorder-threshold-modal` trigger into `inventory-table.tsx` action column (visible when `inventory:adjust` present; pre-fills current `reorder_point`, `reorder_quantity`, and `version`)
+- [X] T034 [US6] Add low-stock badge logic to `inventory-table.tsx` (badge renders when `quantity > 0 AND quantity <= reorder_point`; `Out of Stock` badge when `quantity = 0`; badge tooltip shows configured reorder threshold value)
 
 **Checkpoint**: US6 fully functional. Threshold configuration and badge display independently verifiable.
 
