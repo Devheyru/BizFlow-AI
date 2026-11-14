@@ -2,9 +2,11 @@ import React from "react";
 import { notFound } from "next/navigation";
 import { getTenantContext } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/auth/permissions";
+import { hasInventoryPermission } from "@/lib/inventory/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { ProductDetailView, type AuditEventItem } from "@/components/products/ProductDetailView";
 import { getSignedProductImageUrlAction } from "@/actions/product-actions";
+import { InventorySummaryCard } from "./components/inventory-summary-card";
 import type { Product, UnitOfMeasure, ProductStatus } from "@/types/product";
 
 interface ProductDetailPageProps {
@@ -150,6 +152,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
   const canUpdate = hasPermission(context, "products:update");
   const canArchive = hasPermission(context, "products:archive");
+  const canReadInventory = hasInventoryPermission(context, "inventory:read");
 
   const product: Product = {
     id: productRow.id,
@@ -182,6 +185,11 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
       canArchive={canArchive}
       slug={slug}
       auditEvents={auditEvents}
+      inventorySlot={
+        canReadInventory ? (
+          <InventorySummaryCard slug={slug} productId={productId} />
+        ) : null
+      }
     />
   );
 }
