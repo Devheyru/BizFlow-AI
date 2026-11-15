@@ -48,12 +48,25 @@ export const stockMovementInputSchema = z
       .optional()
       .nullable(),
     idempotencyKey: z.string().uuid().optional().nullable(),
-    expectedVersion: z.number().int().positive().optional().nullable(),
+    expectedVersion: z.number().int().nonnegative().optional().nullable(),
     quantitySemantics: z
       .enum(QUANTITY_SEMANTICS)
       .default("quantity_delta"),
     isDiscrete: z.boolean().optional(),
   })
+  .refine(
+    (data) => {
+      // Expected version 0 is only valid for initial opening stock
+      if (data.expectedVersion === 0) {
+        return data.movementType === "initial";
+      }
+      return true;
+    },
+    {
+      message: "Version 0 is only permitted for initial opening stock",
+      path: ["expectedVersion"],
+    }
+  )
   .refine(
     (data) => {
       // Discrete products check (pieces, units, sets, etc.)
@@ -135,7 +148,7 @@ export type InventoryThresholdInputParsed = z.infer<
 >;
 
 // ============================================================================
-// 3. Inventory Query Schema (T014)
+// 3. Inventory Query & Filter Schema (T014)
 // ============================================================================
 export const inventoryQuerySchema = z.object({
   search: z.string().trim().optional(),
@@ -150,6 +163,10 @@ export const inventoryQuerySchema = z.object({
 });
 
 export type InventoryQueryInputParsed = z.infer<typeof inventoryQuerySchema>;
+
+/** Alias for full backwards and specification naming compatibility */
+export const inventoryFilterSchema = inventoryQuerySchema;
+export type InventoryFilterInputParsed = InventoryQueryInputParsed;
 
 // ============================================================================
 // 4. Movement History Query Schema (T014)
