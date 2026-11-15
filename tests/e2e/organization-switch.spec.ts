@@ -144,10 +144,19 @@ test.describe("T047: Multi-Organization Switching & Persistent Routing (US4)", (
       if (org.slug === victimOrgSlug) victimOrgId = data.id;
     }
 
-    // 3. Seed Memberships with explicit verification
-    const membershipsToCreate = [
-      // multiUser: Owner in orgMulti1 (oldest), Manager in orgMulti2, Owner in orgClosed (inactive)
-      { organization_id: orgMulti1Id, user_id: multiUserId, role: "owner", status: "active" },
+    // 3. Seed Memberships: insert orgMulti1 first to strictly guarantee oldest membership ordering
+    const { error: firstMemErr } = await adminClient
+      .from("organization_memberships")
+      .insert({ organization_id: orgMulti1Id, user_id: multiUserId, role: "owner", status: "active" });
+    if (firstMemErr) {
+      throw new Error(`Failed to seed first test membership: ${firstMemErr.message}`);
+    }
+
+    // Small delay to ensure subsequent memberships have strictly greater created_at timestamps
+    await new Promise((r) => setTimeout(r, 100));
+
+    const remainingMemberships = [
+      // multiUser: Manager in orgMulti2, Owner in orgClosed (inactive)
       { organization_id: orgMulti2Id, user_id: multiUserId, role: "manager", status: "active" },
       { organization_id: orgClosedId, user_id: multiUserId, role: "owner", status: "active" },
 
@@ -168,10 +177,10 @@ test.describe("T047: Multi-Organization Switching & Persistent Routing (US4)", (
 
     const { data: memData, error: memErr } = await adminClient
       .from("organization_memberships")
-      .insert(membershipsToCreate)
+      .insert(remainingMemberships)
       .select();
 
-    if (memErr || !memData || memData.length !== membershipsToCreate.length) {
+    if (memErr || !memData || memData.length !== remainingMemberships.length) {
       throw new Error(`Failed to seed test memberships: ${memErr?.message}`);
     }
   });

@@ -14,6 +14,7 @@ import {
 } from "@/lib/validations/product";
 import { calculateGrossMargin } from "@/lib/products/margin";
 import { removeProductImage } from "@/lib/products/image-storage";
+import { isDiscreteUom } from "@/lib/inventory/formatters";
 import type { ActionResult } from "@/types/auth";
 import type { ProductStatus, UnitOfMeasure } from "@/types/product";
 
@@ -79,6 +80,7 @@ const KNOWN_ERROR_CODES: Record<string, { code: string; message: string }> = {
   P0010: { code: "CONCURRENCY_CONFLICT", message: "This product was modified by another user. Please reload the latest data." },
   P0015: { code: "STATE_CONFLICT", message: "This operation conflicts with the current product or category status." },
   P0016: { code: "INVALID_COST_OPERATION", message: "Invalid cost operation specified." },
+  P0029: { code: "UOM_CLASS_MUTATION_RESTRICTED", message: "Unit of measure cannot be modified when stock or history exists." },
 };
 
 // ============================================================================
@@ -396,15 +398,51 @@ export async function updateProductAction(
 
     const supabase = await createClient();
 
-    // Query existing image to coordinate safe edit-mode image replacement lifecycle
+    // Query existing image and UOM to coordinate safe image replacement and UOM class immutability
     const { data: existingProductRecord } = await supabase
       .from("products")
-      .select("image_url")
+      .select("image_url, unit_of_measure")
       .eq("id", productId)
       .eq("organization_id", context.organization.id)
       .maybeSingle();
 
     const previousImagePath = existingProductRecord?.image_url;
+
+    // FR-INV-030: Reject changes to product unit_of_measure between discrete and continuous
+    // measurement classes whenever on-hand stock > 0 or movement history exists.
+    if (existingProductRecord && input.unit_of_measure) {
+      const oldUom = existingProductRecord.unit_of_measure;
+      const newUom = input.unit_of_measure;
+      if (oldUom && isDiscreteUom(oldUom) !== isDiscreteUom(newUom)) {
+        // 1. Check if on-hand stock > 0
+        const { data: invRow } = await supabase
+          .from("inventory")
+          .select("quantity")
+          .eq("organization_id", context.organization.id)
+          .eq("product_id", productId)
+          .maybeSingle();
+
+        const currentQty = invRow ? parseFloat(String(invRow.quantity)) || 0 : 0;
+
+        // 2. Check if movement history exists
+        const { data: movements } = await supabase
+          .from("stock_movements")
+          .select("id")
+          .eq("organization_id", context.organization.id)
+          .eq("product_id", productId)
+          .limit(1);
+
+        if (currentQty > 0 || (movements && movements.length > 0)) {
+          return {
+            success: false,
+            error: {
+              code: "P0029",
+              message: "Unit of measure cannot be modified when stock or history exists.",
+            },
+          };
+        }
+      }
+    }
 
     // Execute update_product RPC with OCC version check
     const { data: rawRpcData, error } = await supabase.rpc("update_product", {

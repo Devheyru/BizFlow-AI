@@ -104,22 +104,14 @@ export default async function InventoryPage({
   const rawPageSize = parseInt(resolvedParams.pageSize || "20", 10);
   const pageSize = ALLOWED_PAGE_SIZES.includes(rawPageSize) ? rawPageSize : 20;
 
-  // 4. Fetch Active Categories for filter dropdown
+  // 4 & 5. Execute parallel data fetch for categories, overview metrics, and paginated inventory
   const supabase = await createClient();
-  const { data: dbCategories } = await supabase
-    .from("product_categories")
-    .select("id, name, status")
-    .eq("organization_id", context.organization.id)
-    .order("name", { ascending: true });
-
-  const categories: CategoryOption[] = (dbCategories || []).map((cat) => ({
-    id: cat.id,
-    name: cat.name,
-    status: cat.status as "active" | "archived",
-  }));
-
-  // 5. Execute parallel data fetch for overview metrics and paginated inventory
-  const [overviewResult, listResult] = await Promise.all([
+  const [dbCategoriesRes, overviewResult, listResult] = await Promise.all([
+    supabase
+      .from("product_categories")
+      .select("id, name, status")
+      .eq("organization_id", context.organization.id)
+      .order("name", { ascending: true }),
     getInventoryOverviewAction(slug, includeArchived),
     getInventoryListAction(slug, {
       search: rawSearch || undefined,
@@ -133,6 +125,12 @@ export default async function InventoryPage({
       sortOrder,
     }),
   ]);
+
+  const categories: CategoryOption[] = (dbCategoriesRes.data || []).map((cat) => ({
+    id: cat.id,
+    name: cat.name,
+    status: cat.status as "active" | "archived",
+  }));
 
   const hasActiveFilters = Boolean(
     rawSearch ||

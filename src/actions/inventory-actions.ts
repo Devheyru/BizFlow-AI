@@ -474,18 +474,20 @@ export async function getInventoryListAction(
       .filter((r) => (parseFloat(String(r.quantity)) || 0) === 0)
       .map((r) => r.product_id);
 
-    const historyRes = await fetchMovementHistoryProductIds(
-      supabase,
-      context.organization.id,
-      candidateProductIds
-    );
+    let movementProductIds = new Set<string>();
+    if (candidateProductIds.length > 0) {
+      const historyRes = await fetchMovementHistoryProductIds(
+        supabase,
+        context.organization.id,
+        candidateProductIds
+      );
 
-    if (!historyRes.success) {
-      // FAIL CLOSED: If movement history query fails, do not expose inaccurate Initial Opening Stock eligibility
-      return { success: false, error: mapDatabaseError(historyRes.error) };
+      if (!historyRes.success) {
+        // FAIL CLOSED: If movement history query fails, do not expose inaccurate Initial Opening Stock eligibility
+        return { success: false, error: mapDatabaseError(historyRes.error) };
+      }
+      movementProductIds = historyRes.movementProductIds;
     }
-
-    const movementProductIds = historyRes.movementProductIds;
 
     const currency = context.organization.currency || "USD";
 
@@ -863,7 +865,8 @@ export async function recordStockMovementAction(
     const supabase = await createClient();
 
     // Authoritative Server-Side Discrete UOM Verification (FINDING-P5-001)
-    if (typeof supabase.from === "function") {
+    // Integer quantities cannot violate discrete UOM invariants; only fractional values require catalog lookup
+    if (!Number.isInteger(input.quantity) && typeof supabase.from === "function") {
       const { data: productRow } = await supabase
         .from("products")
         .select("unit_of_measure")
@@ -872,15 +875,13 @@ export async function recordStockMovementAction(
         .maybeSingle();
 
       if (productRow && isDiscreteUom(productRow.unit_of_measure)) {
-        if (!Number.isInteger(input.quantity)) {
-          return {
-            success: false,
-            error: {
-              code: "INTEGER_QUANTITY_REQUIRED",
-              message: "Discrete products require whole integer quantities.",
-            },
-          };
-        }
+        return {
+          success: false,
+          error: {
+            code: "INTEGER_QUANTITY_REQUIRED",
+            message: "Discrete products require whole integer quantities.",
+          },
+        };
       }
     }
 

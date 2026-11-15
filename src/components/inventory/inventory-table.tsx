@@ -731,9 +731,8 @@ export function InventoryTable({
           canReceiveStock={canReceiveStock}
           mode={modalMode}
           onRestockSuccess={(_result) => {
-            startTransition(() => {
-              router.refresh();
-            });
+            // Next.js Server Action revalidatePath updates the RSC tree automatically.
+            // Avoid duplicate router.refresh() to prevent concurrent render contention.
           }}
         />
       )}
@@ -754,9 +753,7 @@ export function InventoryTable({
           productStatus={adjustItem.productStatus}
           canAdjustStock={canAdjustStock}
           onAdjustmentSuccess={(_result) => {
-            startTransition(() => {
-              router.refresh();
-            });
+            // Server Action revalidation automatically streams updated RSC tree
           }}
         />
       )}
@@ -777,9 +774,7 @@ export function InventoryTable({
           productStatus={stocktakeItem.productStatus}
           canAdjustStock={canAdjustStock}
           onStocktakeSuccess={(_result) => {
-            startTransition(() => {
-              router.refresh();
-            });
+            // Server Action revalidation automatically streams updated RSC tree
           }}
         />
       )}

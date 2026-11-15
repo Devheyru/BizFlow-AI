@@ -487,6 +487,53 @@ describe("T017: Inventory Server Actions Unit Tests", () => {
       }
     });
 
+    it("FR-INV-006: filters inventory by SKU and barcode search queries", async () => {
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      const mockData = [
+        {
+          product_id: "p1",
+          quantity: "10.0000",
+          reorder_point: "5.0000",
+          reorder_quantity: null,
+          version: 1,
+          products: { id: "p1", name: "Premium Espresso Beans", sku: "COF-SKU-999", barcode: "8888777766665", status: "active", unit_of_measure: "kg" },
+        },
+        {
+          product_id: "p2",
+          quantity: "5.0000",
+          reorder_point: "2.0000",
+          reorder_quantity: null,
+          version: 1,
+          products: { id: "p2", name: "Ceramic Mug", sku: "MUG-001", barcode: null, status: "active", unit_of_measure: "piece" },
+        },
+      ];
+
+      const mockBuilder = createMockQueryBuilder(mockData);
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        from: vi.fn().mockReturnValue(mockBuilder),
+      } as any);
+
+      // Search by SKU
+      const resSku = await getInventoryListAction(mockSlug, { search: "COF-SKU" });
+      expect(resSku.success).toBe(true);
+      if (resSku.success) {
+        expect(resSku.data.items.length).toBe(1);
+        expect(resSku.data.items[0]?.sku).toBe("COF-SKU-999");
+      }
+
+      // Search by Barcode
+      const resBarcode = await getInventoryListAction(mockSlug, { search: "88887777" });
+      expect(resBarcode.success).toBe(true);
+      if (resBarcode.success) {
+        expect(resBarcode.data.items.length).toBe(1);
+        expect(resBarcode.data.items[0]?.barcode).toBe("8888777766665");
+      }
+    });
+
     it("correctly evaluates hasInitialMovement: true for products with non-initial movement history, false when no movements exist", async () => {
       vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
         ok: true,

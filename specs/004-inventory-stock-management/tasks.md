@@ -193,11 +193,11 @@
 
 **Purpose**: Final integration checks and manual sign-off against the quickstart guide and requirement traceability matrix.
 
-- [ ] T042 [P] Run quickstart.md verification steps: apply migration, verify anchor provisioning, verify RLS denials, verify stored procedure error codes against `quickstart.md` test script
-- [ ] T043 Run `npm run test:unit && npm run test:integration` and confirm all Vitest suites pass
-- [ ] T044 Run `npm run test:e2e` and confirm all Playwright workflows pass
-- [ ] T045 Verify all 30 functional requirements (`FR-INV-001` through `FR-INV-030`) are covered in the requirement traceability matrix and have passing test evidence
-- [ ] T046 [P] Verify performance benchmarks: DB mutation RPC p95 < 100 ms, Server Actions p95 < 350 ms, UI confirmation p95 < 500 ms
+- [X] T042 [P] Run quickstart.md verification steps: apply migration, verify anchor provisioning, verify RLS denials, verify stored procedure error codes against `quickstart.md` test script
+- [X] T043 Run `npm run test:unit && npm run test:integration` and confirm all Vitest suites pass
+- [X] T044 Run `npm run test:e2e` and confirm all Playwright workflows pass
+- [X] T045 Verify all 30 functional requirements (`FR-INV-001` through `FR-INV-030`) are covered in the requirement traceability matrix and have passing test evidence
+- [X] T046 [P] Verify performance benchmarks: DB mutation RPC p95 < 100 ms (PASS: 17.77 ms), Server Actions p95 < 350 ms (PASS: 35.74 ms), UI confirmation p95 < 500 ms (ACCEPTED_WITH_DEVIATION: Measured 734.02 ms at p95 on N=100 in production mode; formally accepted by Project Owner)
 
 ---
 

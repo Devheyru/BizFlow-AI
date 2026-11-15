@@ -70,6 +70,26 @@ describe("T037: Canonical Hash Regression Tests (100% PostgreSQL Bit-for-Bit Com
       expect(buildCanonicalPayloadString(input)).toBe(expectedPayload);
       expect(computeCanonicalPayloadHash(input)).toBe(expectedHash);
     });
+
+    it("Fixture 4 — Negative write-off matches approved SHA-256 digest", () => {
+      const input: CanonicalPayloadInput = {
+        organizationId: "a0000000-0000-0000-0000-000000000001",
+        productId: "b0000000-0000-0000-0000-000000000002",
+        movementType: "damage",
+        quantity: -12.5,
+        quantitySemantics: "quantity_delta",
+        reason: 'Broken "glass" & \\backslashes\\',
+        referenceId: 'REF "A-12\\34"',
+      };
+
+      const expectedPayload =
+        '{"canonical_quantity":"-12.5000","movement_type":"damage","organization_id":"a0000000-0000-0000-0000-000000000001","product_id":"b0000000-0000-0000-0000-000000000002","quantity_semantics":"quantity_delta","reason":"Broken \\"glass\\" & \\\\backslashes\\\\","reference_id":"REF \\"A-12\\\\34\\""}';
+      const expectedHash =
+        "16471066ea8ce4b412afa8bebd250abf19bb653de78d01da8d507f1e8e305f26";
+
+      expect(buildCanonicalPayloadString(input)).toBe(expectedPayload);
+      expect(computeCanonicalPayloadHash(input)).toBe(expectedHash);
+    });
   });
 
   // ==========================================================================
