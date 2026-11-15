@@ -75,6 +75,28 @@ describe("T015: Canonical Inventory Payload Hashing", () => {
       const expectedHash = "596a760972b11657cebb84a84a5b4541252b3f5c1d1d781a00c4686aeb7c0a3f";
       expect(hash).toBe(expectedHash);
     });
+
+    it("Fixture 4: Matches approved SHA-256 for negative signed delta write-offs", () => {
+      const input = {
+        organizationId: "a0000000-0000-0000-0000-000000000001",
+        productId: "b0000000-0000-0000-0000-000000000002",
+        movementType: "damage",
+        quantity: -12.5,
+        quantitySemantics: "quantity_delta",
+        reason: 'Broken "glass" & \\backslashes\\',
+        referenceId: 'REF "A-12\\34"',
+      };
+
+      const payloadString = buildCanonicalPayloadString(input);
+      const expectedString =
+        '{"canonical_quantity":"-12.5000","movement_type":"damage","organization_id":"a0000000-0000-0000-0000-000000000001","product_id":"b0000000-0000-0000-0000-000000000002","quantity_semantics":"quantity_delta","reason":"Broken \\"glass\\" & \\\\backslashes\\\\","reference_id":"REF \\"A-12\\\\34\\""}';
+
+      expect(payloadString).toBe(expectedString);
+
+      const hash = computeCanonicalPayloadHash(input);
+      const expectedHash = "16471066ea8ce4b412afa8bebd250abf19bb653de78d01da8d507f1e8e305f26";
+      expect(hash).toBe(expectedHash);
+    });
   });
 
   describe("Numeric Formatting & Precision", () => {

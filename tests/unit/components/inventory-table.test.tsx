@@ -193,6 +193,29 @@ describe("InventoryTable Component (T022, FR-INV-001, FR-INV-003, FR-INV-020, US
     expect(screen.getByTestId("stock-status-badge-prod-4")).toHaveTextContent("[Archived]");
   });
 
+  it("1b. FR-INV-002: Renders all seven required inventory table columns (Product, SKU, Category, Status, Stock Status, On Hand/UOM, Reorder Thresholds)", () => {
+    render(
+      <InventoryTable
+        items={mockItems}
+        totalCount={4}
+        page={1}
+        pageSize={20}
+        totalPages={1}
+        canViewValuation={false}
+        slug={mockSlug}
+      />
+    );
+
+    // Verify all 7 required column headers are rendered in the DOM
+    expect(screen.getByRole("columnheader", { name: /Product/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /SKU/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Category/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /^Status$/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Stock Status/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /On Hand/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Reorder Point/i })).toBeInTheDocument();
+  });
+
   it("2. Applies visual row highlight for low stock and out of stock items", () => {
     render(
       <InventoryTable

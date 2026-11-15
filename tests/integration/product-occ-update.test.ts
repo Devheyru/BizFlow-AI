@@ -168,6 +168,11 @@ describe("T036: update_product RPC & Optimistic Concurrency Control (US3)", () =
   afterAll(async () => {
     try {
       if (orgAId && orgBId) {
+        await pgClient.query("DELETE FROM public.zero_delta_stocktakes WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
+        await pgClient.query("DELETE FROM public.stock_movement_costs WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
+        await pgClient.query("DELETE FROM public.stock_movements WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
+        await pgClient.query("DELETE FROM public.inventory WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
+        await pgClient.query("DELETE FROM public.product_costs WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
         await pgClient.query("DELETE FROM public.products WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
         await pgClient.query("DELETE FROM public.product_categories WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
         await pgClient.query("DELETE FROM public.organization_audit_events WHERE organization_id IN ($1, $2);", [orgAId, orgBId]);
@@ -846,6 +851,144 @@ describe("T036: update_product RPC & Optimistic Concurrency Control (US3)", () =
         consoleErrorSpy.mockRestore();
         await adminClient.storage.from("product-images").remove([initialPath, replacementPath]);
       }
+    });
+  });
+
+  describe("FR-INV-030: Unit of Measure Class Mutation Restriction", () => {
+    it("1. Rejects UOM class change (discrete to continuous) when product has positive on-hand stock with P0029", async () => {
+      const prodRes = await pgClient.query(
+        `INSERT INTO public.products (
+          organization_id, name, sku, selling_price, unit_of_measure, status, version, created_by, updated_by
+        ) VALUES ($1, 'Discrete Item With Stock', $2, 50.0, 'piece', 'active', 1, $3, $3)
+        RETURNING id, sku;`,
+        [orgAId, `SKU-UOM-DISC-${Date.now()}`, ownerUserId]
+      );
+      const prod = prodRes.rows[0];
+
+      await pgClient.query(`SET request.jwt.claim.sub = '${ownerUserId}';`);
+      await pgClient.query(
+        `SELECT public.execute_stock_movement(
+          $1, $2, 'initial', 10.0000, 'Opening discrete stock', NULL, $3, 1, 'quantity_delta'
+        );`,
+        [orgAId, prod.id, crypto.randomUUID()]
+      );
+
+      const invCheck = await pgClient.query(
+        `SELECT quantity FROM public.inventory WHERE organization_id = $1 AND product_id = $2;`,
+        [orgAId, prod.id]
+      );
+      expect(parseFloat(invCheck.rows[0].quantity)).toBe(10);
+
+      clearInMemoryCookieJar();
+      const serverClient = await createServerClient();
+      await serverClient.auth.signInWithPassword({
+        email: ownerEmail,
+        password: testPassword,
+      });
+
+      const result = await updateProductAction(orgASlug, prod.id, {
+        expected_version: 1,
+        name: "Discrete Item With Stock",
+        sku: prod.sku,
+        selling_price: 50.0,
+        unit_of_measure: "kg",
+        cost_operation: "unchanged",
+      });
+
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.code).toBe("P0029");
+      expect(result.error.message).toContain("Unit of measure cannot be modified when stock or history exists.");
+    });
+
+    it("2. Rejects UOM class change when on-hand stock is 0 but movement history exists with P0029", async () => {
+      const prodRes = await pgClient.query(
+        `INSERT INTO public.products (
+          organization_id, name, sku, selling_price, unit_of_measure, status, version, created_by, updated_by
+        ) VALUES ($1, 'Discrete Item Zero Stock With History', $2, 40.0, 'unit', 'active', 1, $3, $3)
+        RETURNING id, sku;`,
+        [orgAId, `SKU-UOM-HIST-${Date.now()}`, ownerUserId]
+      );
+      const prod = prodRes.rows[0];
+
+      await pgClient.query(`SET request.jwt.claim.sub = '${ownerUserId}';`);
+      await pgClient.query(
+        `SELECT public.execute_stock_movement(
+          $1, $2, 'initial', 5.0000, 'Initial stock', NULL, $3, 1, 'quantity_delta'
+        );`,
+        [orgAId, prod.id, crypto.randomUUID()]
+      );
+
+      await pgClient.query(
+        `SELECT public.execute_stock_movement(
+          $1, $2, 'damage', -5.0000, 'Written off to zero', NULL, $3, 2, 'quantity_delta'
+        );`,
+        [orgAId, prod.id, crypto.randomUUID()]
+      );
+
+      const invCheck = await pgClient.query(
+        `SELECT quantity FROM public.inventory WHERE organization_id = $1 AND product_id = $2;`,
+        [orgAId, prod.id]
+      );
+      expect(parseFloat(invCheck.rows[0].quantity)).toBe(0);
+
+      const mvCheck = await pgClient.query(
+        `SELECT count(*) FROM public.stock_movements WHERE organization_id = $1 AND product_id = $2;`,
+        [orgAId, prod.id]
+      );
+      expect(parseInt(mvCheck.rows[0].count, 10)).toBe(2);
+
+      clearInMemoryCookieJar();
+      const serverClient = await createServerClient();
+      await serverClient.auth.signInWithPassword({
+        email: ownerEmail,
+        password: testPassword,
+      });
+
+      const result = await updateProductAction(orgASlug, prod.id, {
+        expected_version: 1,
+        name: "Discrete Item Zero Stock With History",
+        sku: prod.sku,
+        selling_price: 40.0,
+        unit_of_measure: "liter",
+        cost_operation: "unchanged",
+      });
+
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.code).toBe("P0029");
+      expect(result.error.message).toContain("Unit of measure cannot be modified when stock or history exists.");
+    });
+
+    it("3. Permits UOM class change when on-hand stock is 0 and NO movement history exists", async () => {
+      const prodRes = await pgClient.query(
+        `INSERT INTO public.products (
+          organization_id, name, sku, selling_price, unit_of_measure, status, version, created_by, updated_by
+        ) VALUES ($1, 'Pristine Item No History', $2, 30.0, 'piece', 'active', 1, $3, $3)
+        RETURNING id, sku;`,
+        [orgAId, `SKU-UOM-PRISTINE-${Date.now()}`, ownerUserId]
+      );
+      const prod = prodRes.rows[0];
+
+      clearInMemoryCookieJar();
+      const serverClient = await createServerClient();
+      await serverClient.auth.signInWithPassword({
+        email: ownerEmail,
+        password: testPassword,
+      });
+
+      const result = await updateProductAction(orgASlug, prod.id, {
+        expected_version: 1,
+        name: "Pristine Item No History",
+        sku: prod.sku,
+        selling_price: 30.0,
+        unit_of_measure: "kg",
+        cost_operation: "unchanged",
+      });
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.unit_of_measure).toBe("kg");
     });
   });
 });

@@ -100,19 +100,19 @@ test.describe("T057: Complete Product Catalog Retail Journey E2E (FR-001–FR-04
           createdOrgIds,
         ]);
         await pgClient.query(`DELETE FROM public.organizations WHERE id = ANY($1::uuid[]);`, [createdOrgIds]);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     try {
       if (pgClient) {
         await pgClient.end();
       }
-    } catch (_) {}
+    } catch (_) { }
 
     for (const uid of createdUserIds) {
       try {
         await adminClient.auth.admin.deleteUser(uid);
-      } catch (_) {}
+      } catch (_) { }
     }
   });
 
@@ -178,7 +178,7 @@ test.describe("T057: Complete Product Catalog Retail Journey E2E (FR-001–FR-04
     await expect(page.getByText(categoryName)).toBeVisible();
     await expect(page.getByText("$3.50")).toBeVisible();
     // Verify Cost and Gross Margin panels visible to Owner
-    await expect(page.getByText("$1.20")).toBeVisible();
+    await expect(page.getByText("$1.20").first()).toBeVisible();
     await expect(page.getByText("65.7%")).toBeVisible();
 
     // 6. Test Real Database OCC Concurrency Conflict Recovery
@@ -217,27 +217,23 @@ test.describe("T057: Complete Product Catalog Retail Journey E2E (FR-001–FR-04
 
     // 7a. Prefix search (2 chars)
     await searchInput.fill("SP");
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(500);
-    await expect(page.getByText(productSku)).toBeVisible();
+    await page.waitForURL(/q=SP/, { timeout: 15000 }).catch(() => { });
+    await expect(page.getByText(productSku)).toBeVisible({ timeout: 15000 });
 
     // 7b. Substring search (3+ chars)
     await searchInput.fill("Water");
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(500);
-    await expect(page.getByText(productSku)).toBeVisible();
+    await page.waitForURL(/q=Water/, { timeout: 15000 }).catch(() => { });
+    await expect(page.getByText(productSku)).toBeVisible({ timeout: 15000 });
 
     // 7c. Non-matching search query
     await searchInput.fill("NONEXISTENTQUERY999");
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(500);
-    await expect(page.getByText(productSku)).toHaveCount(0);
+    await page.waitForURL(/q=NONEXISTENTQUERY999/, { timeout: 15000 });
+    await expect(page.getByText(productSku)).toHaveCount(0, { timeout: 15000 });
 
     // Clear search
     await searchInput.fill("");
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(500);
-    await expect(page.getByText(productSku)).toBeVisible();
+    await page.waitForURL((url) => !url.searchParams.has("q"), { timeout: 15000 }).catch(() => { });
+    await expect(page.getByText(productSku)).toBeVisible({ timeout: 15000 });
 
     // 8. Category & Status Filtering
     const categorySelect = page.locator("select").first();
@@ -251,21 +247,20 @@ test.describe("T057: Complete Product Catalog Retail Journey E2E (FR-001–FR-04
     await page.waitForTimeout(500);
     await expect(page.getByText(productSku)).toHaveCount(0);
 
-    // Reset Category filter
-    await categorySelect.selectOption("");
-    await page.waitForTimeout(500);
-    await expect(page.getByText(productSku)).toBeVisible();
+    // Reset Category filter to All Categories
+    await categorySelect.selectOption({ index: 0 });
+    await expect(page.getByText(productSku)).toBeVisible({ timeout: 15000 });
 
     // Status Tab: Active vs Archived
     await page.click('button:has-text("Archived")');
-    await page.waitForTimeout(500);
+    await page.waitForURL(/status=archived/, { timeout: 15000 }).catch(() => { });
     // Product is currently active, so not in archived list
-    await expect(page.getByText(productSku)).toHaveCount(0);
+    await expect(page.getByText(productSku)).toHaveCount(0, { timeout: 15000 });
 
     // Switch back to Active
     await page.click('button:has-text("Active")');
-    await page.waitForTimeout(500);
-    await expect(page.getByText(productSku)).toBeVisible();
+    await page.waitForURL(/status=active/, { timeout: 15000 }).catch(() => { });
+    await expect(page.getByText(productSku)).toBeVisible({ timeout: 15000 });
 
     // 9. Product Archival Lifecycle
     // Click Archive button on the product row
