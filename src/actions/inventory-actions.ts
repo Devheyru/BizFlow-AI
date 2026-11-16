@@ -707,31 +707,41 @@ export async function getInventoryProductAction(
       };
     }
 
-    // Get last movement timestamp (fails closed on error)
-    const { data: lastMv, error: lastMvError } = await supabase
-      .from("stock_movements")
-      .select("created_at")
-      .eq("organization_id", context.organization.id)
-      .eq("product_id", productId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Evaluate movement history access at server boundary (Feature 004, Finding 6)
+    const canViewHistory = hasInventoryPermission(context, "inventory:history");
+    let lastMovementAt: string | null = null;
+    let movementHistoryError: string | null = null;
+    let initialMv: { id: string } | null = null;
 
-    if (lastMvError) {
-      return { success: false, error: mapDatabaseError(lastMvError) };
-    }
+    if (canViewHistory) {
+      // Get last movement timestamp (fails closed on error)
+      const { data: lastMv, error: lastMvError } = await supabase
+        .from("stock_movements")
+        .select("created_at")
+        .eq("organization_id", context.organization.id)
+        .eq("product_id", productId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    // Check if initial opening stock movement exists (T025, US3)
-    const { data: initialMv, error: initialMvError } = await supabase
-      .from("stock_movements")
-      .select("id")
-      .eq("organization_id", context.organization.id)
-      .eq("product_id", productId)
-      .eq("movement_type", "initial")
-      .maybeSingle();
+      if (lastMvError) {
+        movementHistoryError = "Failed to load movement history";
+      } else {
+        lastMovementAt = lastMv?.created_at || null;
+      }
 
-    if (initialMvError) {
-      return { success: false, error: mapDatabaseError(initialMvError) };
+      // Check if initial opening stock movement exists (T025, US3)
+      const { data: initialMvData, error: initialMvError } = await supabase
+        .from("stock_movements")
+        .select("id")
+        .eq("organization_id", context.organization.id)
+        .eq("product_id", productId)
+        .eq("movement_type", "initial")
+        .maybeSingle();
+
+      if (!initialMvError && initialMvData) {
+        initialMv = initialMvData;
+      }
     }
 
     const p = invRow.products as unknown as {
@@ -773,8 +783,10 @@ export async function getInventoryProductAction(
         reorderQuantity: invRow.reorder_quantity !== null ? parseFloat(String(invRow.reorder_quantity)) : null,
         stockStatus,
         version: invRow.version,
-        lastMovementAt: lastMv?.created_at || null,
-        hasInitialMovement: qty > 0 || Boolean(lastMv || initialMv),
+        lastMovementAt,
+        canViewMovementHistory: canViewHistory,
+        movementHistoryError,
+        hasInitialMovement: qty > 0 || Boolean(lastMovementAt || initialMv),
         unitCost: allowValuation && costPrice !== null && !isNaN(costPrice) ? costPrice : null,
         totalValue:
           allowValuation && costPrice !== null && !isNaN(costPrice)

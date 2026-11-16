@@ -515,7 +515,7 @@ export function InventoryTable({
                   {/* Action Buttons */}
                   <td className="py-3.5 pl-3 pr-4 sm:pr-6 whitespace-nowrap text-right text-xs">
                     <div className="flex items-center justify-end gap-1.5">
-                      {/* Initial Stock trigger slot (T025, US3) */}
+                      {/* Initial Stock trigger slot (T025, US3, F004-UI-01) */}
                       {canReceiveStock &&
                         item.productStatus === "active" &&
                         item.quantity === 0 &&
@@ -530,11 +530,12 @@ export function InventoryTable({
                               setRestockItem(item);
                               onInitialStockClick?.(item);
                             }}
-                            title="Opening Stock"
+                            title="Initial Stock — Record opening inventory balance"
+                            aria-label="Initial Stock — Record opening inventory balance"
                             data-testid={`initial-stock-btn-${item.productId}`}
                           >
-                            <PackagePlus className="h-4 w-4" />
-                            <span className="hidden md:inline ml-1 text-xs">Opening Stock</span>
+                            <PackagePlus className="h-4 w-4 shrink-0" />
+                            <span className="ml-1 text-xs font-medium">Opening Stock</span>
                           </Button>
                         )}
 
@@ -752,6 +753,8 @@ export function InventoryTable({
           isDiscrete={adjustItem.isDiscrete}
           productStatus={adjustItem.productStatus}
           canAdjustStock={canAdjustStock}
+          hasInitialMovement={adjustItem.hasInitialMovement}
+          canReceiveStock={canReceiveStock}
           onAdjustmentSuccess={(_result) => {
             // Server Action revalidation automatically streams updated RSC tree
           }}

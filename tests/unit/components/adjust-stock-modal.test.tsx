@@ -220,4 +220,45 @@ describe("AdjustStockModal Component (T026, US4, Phase 7)", () => {
     expect(await screen.findByTestId("adjust-error-alert")).toBeInTheDocument();
     expect(screen.getByText("STALE_VERSION_CONFLICT")).toBeInTheDocument();
   });
+
+  it("10. Renders initial stock guidance tip when currentStock is 0, no movement history, active status, and receive permission (F004-UI-01)", () => {
+    render(<AdjustStockModal {...defaultProps} currentStock={0} hasInitialMovement={false} canReceiveStock={true} />);
+
+    const tip = screen.getByTestId("adjust-initial-stock-guidance");
+    expect(tip).toBeInTheDocument();
+    expect(tip).toHaveTextContent("Looking to record Initial Opening Stock?");
+    expect(tip).toHaveTextContent("Opening Stock");
+  });
+
+  it("11. Does NOT render initial stock guidance tip when currentStock is greater than 0", () => {
+    render(<AdjustStockModal {...defaultProps} currentStock={25} hasInitialMovement={false} />);
+
+    expect(screen.queryByTestId("adjust-initial-stock-guidance")).toBeNull();
+  });
+
+  it("12. Does NOT render initial stock guidance tip when currentStock is 0 but movement history exists (Scenarios B, C, D, E)", () => {
+    render(<AdjustStockModal {...defaultProps} currentStock={0} hasInitialMovement={true} />);
+
+    expect(screen.queryByTestId("adjust-initial-stock-guidance")).toBeNull();
+  });
+
+  it("13. Does NOT render initial stock guidance tip when product is archived or inactive (Scenario F)", () => {
+    const { rerender } = render(
+      <AdjustStockModal {...defaultProps} currentStock={0} hasInitialMovement={false} productStatus="archived" />
+    );
+    expect(screen.queryByTestId("adjust-initial-stock-guidance")).toBeNull();
+
+    rerender(
+      <AdjustStockModal {...defaultProps} currentStock={0} hasInitialMovement={false} productStatus="inactive" />
+    );
+    expect(screen.queryByTestId("adjust-initial-stock-guidance")).toBeNull();
+  });
+
+  it("14. Does NOT render initial stock guidance tip when caller lacks canReceiveStock permission", () => {
+    render(
+      <AdjustStockModal {...defaultProps} currentStock={0} hasInitialMovement={false} canReceiveStock={false} />
+    );
+
+    expect(screen.queryByTestId("adjust-initial-stock-guidance")).toBeNull();
+  });
 });

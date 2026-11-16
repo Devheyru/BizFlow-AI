@@ -9,19 +9,20 @@ interface TenantLayoutProps {
 }
 
 /**
- * Tenant Workspace Layout (T038, Feature 003 T027).
+ * Tenant Workspace Layout (T038, Feature 003 T027, Feature 004 F004-UI-02).
  *
  * Resolves tenant context on the server via `getTenantContext()` before rendering
  * workspace content. Rejects unauthorized access with HTTP 404 (via notFound()),
  * preventing tenant existence disclosure.
  *
- * Evaluates authoritative `products:read` permission on the server and passes
- * `canViewProducts` to TenantHeader for navigation gating.
+ * Evaluates authoritative `products:read` and `inventory:read` permissions on the server
+ * and passes `canViewProducts` and `canViewInventory` to TenantHeader for navigation gating.
  */
 export default async function TenantLayout({ children, params }: TenantLayoutProps) {
   const { slug } = await params;
   const context = await getTenantContext(slug);
   const canViewProducts = hasPermission(context, "products:read");
+  const canViewInventory = hasPermission(context, "inventory:read");
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -31,6 +32,7 @@ export default async function TenantLayout({ children, params }: TenantLayoutPro
         user={context.user}
         activeOrganizations={context.activeOrganizations}
         canViewProducts={canViewProducts}
+        canViewInventory={canViewInventory}
       />
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
