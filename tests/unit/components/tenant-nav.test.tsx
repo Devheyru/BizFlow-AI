@@ -108,6 +108,73 @@ describe("TenantNav: Permission-Gated Navigation (T027, FR-026)", () => {
     });
   });
 
+  describe("Inventory Navigation Item Visibility (Feature 004, F004-UI-02)", () => {
+    it("4c. renders Inventory navigation item when canViewInventory is true", () => {
+      render(<TenantNav slug={testSlug} role="cashier" canViewInventory={true} />);
+
+      const inventoryLink = screen.getByRole("link", { name: /inventory/i });
+      expect(inventoryLink).toBeInTheDocument();
+      expect(inventoryLink).toHaveAttribute("href", `/${testSlug}/inventory`);
+    });
+
+    it("4d. does NOT render Inventory navigation item when canViewInventory is false", () => {
+      render(<TenantNav slug={testSlug} role="owner" canViewInventory={false} />);
+
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
+    });
+
+    it("4e. does NOT render Inventory when canViewInventory is omitted (fails closed by default)", () => {
+      render(<TenantNav slug={testSlug} role="admin" />);
+
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
+    });
+
+    it("4f. does NOT render Inventory when canViewInventory is undefined", () => {
+      render(<TenantNav slug={testSlug} role="manager" canViewInventory={undefined} />);
+
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
+    });
+
+    it("4g. does NOT render Inventory when canViewInventory is null (runtime boundary safety)", () => {
+      render(<TenantNav slug={testSlug} role="owner" canViewInventory={null as unknown as boolean} />);
+
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
+    });
+
+    it("4h. does NOT infer Inventory visibility from role name alone across all roles", () => {
+      const allRoles: AppRole[] = ["owner", "admin", "manager", "cashier"];
+
+      for (const role of allRoles) {
+        const { unmount } = render(<TenantNav slug={testSlug} role={role} canViewInventory={false} />);
+        expect(
+          screen.queryByRole("link", { name: /inventory/i }),
+          `Expected Inventory link to be hidden for role ${role} when canViewInventory is false`
+        ).not.toBeInTheDocument();
+        unmount();
+
+        const { unmount: unmountOmitted } = render(<TenantNav slug={testSlug} role={role} />);
+        expect(
+          screen.queryByRole("link", { name: /inventory/i }),
+          `Expected Inventory link to be hidden for role ${role} when canViewInventory is omitted`
+        ).not.toBeInTheDocument();
+        unmountOmitted();
+      }
+    });
+
+    it("4i. renders Inventory for ANY role when canViewInventory is true", () => {
+      const allRoles: AppRole[] = ["owner", "admin", "manager", "cashier"];
+
+      for (const role of allRoles) {
+        const { unmount } = render(<TenantNav slug={testSlug} role={role} canViewInventory={true} />);
+        expect(
+          screen.getByRole("link", { name: /inventory/i }),
+          `Expected Inventory link to be visible for role ${role} when canViewInventory is true`
+        ).toBeInTheDocument();
+        unmount();
+      }
+    });
+  });
+
   describe("Preservation of Existing Navigation Behavior", () => {
     it("5a. renders Employees navigation item only for Owner, Admin, and Manager", () => {
       const privilegedRoles: AppRole[] = ["owner", "admin", "manager"];
@@ -207,6 +274,30 @@ describe("TenantNav: Permission-Gated Navigation (T027, FR-026)", () => {
       expect(dashboardLink.className).not.toContain("bg-blue-50");
       expect(dashboardLink.className).toContain("text-gray-600");
     });
+
+    it("6e. applies active highlighting to Inventory link when route matches /inventory exactly", () => {
+      mockPathname = `/${testSlug}/inventory`;
+      render(<TenantNav slug={testSlug} role="manager" canViewInventory={true} />);
+
+      const inventoryLink = screen.getByRole("link", { name: /inventory/i });
+      expect(inventoryLink.className).toContain("bg-blue-50");
+      expect(inventoryLink.className).toContain("text-blue-700");
+      expect(inventoryLink.className).toContain("font-semibold");
+
+      const dashboardLink = screen.getByRole("link", { name: /dashboard/i });
+      expect(dashboardLink.className).toContain("text-gray-600");
+      expect(dashboardLink.className).not.toContain("bg-blue-50");
+    });
+
+    it("6f. applies active highlighting to Inventory link when route matches a nested subpath", () => {
+      mockPathname = `/${testSlug}/inventory/history`;
+      render(<TenantNav slug={testSlug} role="admin" canViewInventory={true} />);
+
+      const inventoryLink = screen.getByRole("link", { name: /inventory/i });
+      expect(inventoryLink.className).toContain("bg-blue-50");
+      expect(inventoryLink.className).toContain("text-blue-700");
+      expect(inventoryLink.className).toContain("font-semibold");
+    });
   });
 
   describe("TenantHeader Component Integration", () => {
@@ -285,6 +376,47 @@ describe("TenantNav: Permission-Gated Navigation (T027, FR-026)", () => {
       );
 
       expect(screen.queryByRole("link", { name: /products/i })).not.toBeInTheDocument();
+    });
+
+    it("passes canViewInventory=true down to TenantNav", () => {
+      render(
+        <TenantHeader
+          organization={mockOrg}
+          role="owner"
+          user={mockUser}
+          activeOrganizations={mockSummaries}
+          canViewInventory={true}
+        />
+      );
+
+      expect(screen.getByRole("link", { name: /inventory/i })).toBeInTheDocument();
+    });
+
+    it("passes canViewInventory=false down to TenantNav (Inventory hidden)", () => {
+      render(
+        <TenantHeader
+          organization={mockOrg}
+          role="owner"
+          user={mockUser}
+          activeOrganizations={mockSummaries}
+          canViewInventory={false}
+        />
+      );
+
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
+    });
+
+    it("defaults canViewInventory to false when omitted in TenantHeader (Inventory hidden)", () => {
+      render(
+        <TenantHeader
+          organization={mockOrg}
+          role="owner"
+          user={mockUser}
+          activeOrganizations={mockSummaries}
+        />
+      );
+
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
     });
   });
 
@@ -409,6 +541,74 @@ describe("TenantNav: Permission-Gated Navigation (T027, FR-026)", () => {
       render(layoutJsx);
 
       expect(screen.queryByRole("link", { name: /products/i })).not.toBeInTheDocument();
+    });
+
+    it("evaluates inventory:read at server boundary and renders Inventory when permission is present", async () => {
+      const authorizedContext: TenantContext = {
+        organization: baseOrg,
+        user: baseUser,
+        membership: baseMembership,
+        role: "cashier",
+        activeOrganizations: [],
+        permissions: ["inventory:read"],
+      };
+
+      mockGetTenantContext.mockResolvedValueOnce(authorizedContext);
+
+      const layoutJsx = await TenantLayout({
+        children: <div data-testid="child-content">Workspace Body</div>,
+        params: Promise.resolve({ slug: testSlug }),
+      });
+
+      render(layoutJsx);
+
+      expect(screen.getByRole("link", { name: /inventory/i })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /products/i })).not.toBeInTheDocument();
+    });
+
+    it("evaluates inventory:read at server boundary and omits Inventory when permission is absent", async () => {
+      const unauthorizedContext: TenantContext = {
+        organization: baseOrg,
+        user: baseUser,
+        membership: { ...baseMembership, role: "cashier" },
+        role: "cashier",
+        activeOrganizations: [],
+        permissions: ["products:read"],
+      };
+
+      mockGetTenantContext.mockResolvedValueOnce(unauthorizedContext);
+
+      const layoutJsx = await TenantLayout({
+        children: <div data-testid="child-content">Workspace Body</div>,
+        params: Promise.resolve({ slug: testSlug }),
+      });
+
+      render(layoutJsx);
+
+      expect(screen.getByRole("link", { name: /products/i })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
+    });
+
+    it("omits Inventory when membership is suspended even if role is owner (fails closed via Rule 2)", async () => {
+      const suspendedOwnerContext: TenantContext = {
+        organization: baseOrg,
+        user: baseUser,
+        membership: { ...baseMembership, role: "owner", status: "suspended" },
+        role: "owner",
+        activeOrganizations: [],
+        permissions: ["inventory:read"],
+      };
+
+      mockGetTenantContext.mockResolvedValueOnce(suspendedOwnerContext);
+
+      const layoutJsx = await TenantLayout({
+        children: <div data-testid="child-content">Workspace Body</div>,
+        params: Promise.resolve({ slug: testSlug }),
+      });
+
+      render(layoutJsx);
+
+      expect(screen.queryByRole("link", { name: /inventory/i })).not.toBeInTheDocument();
     });
   });
 });

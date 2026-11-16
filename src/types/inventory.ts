@@ -300,6 +300,8 @@ export interface InventoryProductDetail {
   stockStatus: StockStatus;
   version: number;
   lastMovementAt: string | null;
+  canViewMovementHistory?: boolean;
+  movementHistoryError?: string | null;
   hasInitialMovement?: boolean;
   unitCost?: number | null;
   totalValue?: number | null;

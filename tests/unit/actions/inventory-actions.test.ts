@@ -705,6 +705,95 @@ describe("T017: Inventory Server Actions Unit Tests", () => {
         expect(res.data.stockStatus).toBe("in_stock");
       }
     });
+
+    it("evaluates movement history access: returns canViewMovementHistory: false when lacking inventory:history (Finding 6)", async () => {
+      // Cashier context: has inventory:read, but lacks inventory:history
+      const cashierContext = createMockContext(
+        ["inventory:read", "products:read", "categories:read"],
+        "cashier"
+      );
+
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: cashierContext as any,
+      });
+
+      const mockInvData = {
+        quantity: 14,
+        reorder_point: 5,
+        reorder_quantity: 10,
+        version: 8,
+        products: {
+          id: mockProductId,
+          name: "Test T-Shirt",
+          sku: "TEST-PROD-002",
+          barcode: null,
+          status: "active",
+          unit_of_measure: "piece",
+        },
+      };
+
+      const mockFrom = vi.fn().mockReturnValue(createMockQueryBuilder(mockInvData));
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        from: mockFrom,
+      } as any);
+
+      const res = await getInventoryProductAction(mockSlug, mockProductId);
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.canViewMovementHistory).toBe(false);
+        expect(res.data.lastMovementAt).toBeNull();
+        // Crucial security check: did not attempt to query stock_movements under cashier session
+        expect(mockFrom).not.toHaveBeenCalledWith("stock_movements");
+      }
+    });
+
+    it("evaluates movement history access: returns canViewMovementHistory: true and queries movements when holding inventory:history", async () => {
+      // Owner/Manager context: has inventory:history
+      vi.mocked(authContext.resolveTenantContext).mockResolvedValue({
+        ok: true,
+        context: fullPermsContext as any,
+      });
+
+      const mockInvData = {
+        quantity: 14,
+        reorder_point: 5,
+        reorder_quantity: 10,
+        version: 8,
+        products: {
+          id: mockProductId,
+          name: "Test T-Shirt",
+          sku: "TEST-PROD-002",
+          barcode: null,
+          status: "active",
+          unit_of_measure: "piece",
+        },
+      };
+
+      const mockLastMovement = { created_at: "2026-11-15T14:30:00.000Z" };
+
+      const mockFrom = vi.fn().mockImplementation((table: string) => {
+        if (table === "inventory") {
+          return createMockQueryBuilder(mockInvData);
+        }
+        if (table === "stock_movements") {
+          return createMockQueryBuilder(mockLastMovement);
+        }
+        return createMockQueryBuilder(null);
+      });
+
+      vi.mocked(supabaseServer.createClient).mockResolvedValue({
+        from: mockFrom,
+      } as any);
+
+      const res = await getInventoryProductAction(mockSlug, mockProductId);
+      expect(res.success).toBe(true);
+      if (res.success) {
+        expect(res.data.canViewMovementHistory).toBe(true);
+        expect(res.data.lastMovementAt).toBe("2026-11-15T14:30:00.000Z");
+        expect(mockFrom).toHaveBeenCalledWith("stock_movements");
+      }
+    });
   });
 
   // ============================================================================

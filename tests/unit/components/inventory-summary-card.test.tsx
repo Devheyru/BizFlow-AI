@@ -218,11 +218,12 @@ describe("InventorySummaryCard Component (T035, Phase 10)", () => {
   });
 
   // 7. No movement history is handled correctly
-  it("7. Gracefully handles products with no movement history recorded", () => {
+  it("7. Gracefully handles products with no movement history recorded (State B: Authorized & no movements)", () => {
     render(
       <InventorySummaryCardView
         inventory={{
           ...baseInventoryData,
+          canViewMovementHistory: true,
           lastMovementAt: null,
         }}
       />
@@ -231,6 +232,47 @@ describe("InventorySummaryCard Component (T035, Phase 10)", () => {
     const movementElem = screen.getByTestId("inventory-last-movement");
     expect(movementElem).toBeInTheDocument();
     expect(movementElem).toHaveTextContent("No stock movements recorded");
+    const elements = screen.getAllByText("No stock movements recorded");
+    expect(elements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("7b. Displays access-restricted state when user lacks movement-history permission (State C: Unauthorized)", () => {
+    render(
+      <InventorySummaryCardView
+        inventory={{
+          ...baseInventoryData,
+          canViewMovementHistory: false,
+          lastMovementAt: null,
+        }}
+      />
+    );
+
+    const movementElem = screen.getByTestId("inventory-last-movement");
+    expect(movementElem).toBeInTheDocument();
+    expect(movementElem).toHaveTextContent("Access Restricted");
+    expect(
+      screen.getByText("You don't have permission to view inventory movement history.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No stock movements recorded")).not.toBeInTheDocument();
+  });
+
+  it("7c. Displays unavailable state when movement-history query fails (State D: Error)", () => {
+    render(
+      <InventorySummaryCardView
+        inventory={{
+          ...baseInventoryData,
+          canViewMovementHistory: true,
+          movementHistoryError: "Failed to load movement history",
+          lastMovementAt: null,
+        }}
+      />
+    );
+
+    const movementElem = screen.getByTestId("inventory-last-movement");
+    expect(movementElem).toBeInTheDocument();
+    expect(movementElem).toHaveTextContent("Unavailable");
+    expect(screen.getByText("Failed to load movement history.")).toBeInTheDocument();
+    expect(screen.queryByText("No stock movements recorded")).not.toBeInTheDocument();
   });
 
   // 8. Unauthorized inventory users do not see the card

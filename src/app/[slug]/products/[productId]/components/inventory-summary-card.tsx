@@ -192,27 +192,65 @@ export function InventorySummaryCardView({
           </p>
         </div>
 
-        {/* Last Movement Date */}
+        {/* Last Movement Date (Feature 004 Finding 2 / Finding 6) */}
         <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 space-y-1">
           <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
             Last Movement
           </span>
-          <div
-            data-testid="inventory-last-movement"
-            className={`text-sm font-semibold pt-1 ${
-              inventory.lastMovementAt
-                ? "text-zinc-900 dark:text-zinc-100"
-                : "text-zinc-400 dark:text-zinc-500 font-normal italic"
-            }`}
-          >
-            {formatMovementTimestamp(inventory.lastMovementAt)}
-          </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {inventory.lastMovementAt
-              ? "Audited ledger activity"
-              : "No stock movements recorded"}
-          </p>
+          {inventory.canViewMovementHistory === false ? (
+            // State C: User is not authorized to view movement history (e.g. Cashier lacking inventory:history)
+            <>
+              <div
+                data-testid="inventory-last-movement"
+                className="text-sm font-medium pt-1 text-zinc-500 dark:text-zinc-400 italic"
+              >
+                Access Restricted
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                You don&apos;t have permission to view inventory movement history.
+              </p>
+            </>
+          ) : inventory.movementHistoryError ? (
+            // State D: Movement-history query fails
+            <>
+              <div
+                data-testid="inventory-last-movement"
+                className="text-sm font-medium pt-1 text-red-600 dark:text-red-400 italic"
+              >
+                Unavailable
+              </div>
+              <p className="text-xs text-red-500 dark:text-red-400">
+                Failed to load movement history.
+              </p>
+            </>
+          ) : inventory.lastMovementAt ? (
+            // State A: User is authorized and movements exist
+            <>
+              <div
+                data-testid="inventory-last-movement"
+                className="text-sm font-semibold pt-1 text-zinc-900 dark:text-zinc-100"
+              >
+                {formatMovementTimestamp(inventory.lastMovementAt)}
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Audited ledger activity
+              </p>
+            </>
+          ) : (
+            // State B: User is authorized and no movements exist
+            <>
+              <div
+                data-testid="inventory-last-movement"
+                className="text-sm font-normal pt-1 text-zinc-400 dark:text-zinc-500 italic"
+              >
+                No stock movements recorded
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                No stock movements recorded
+              </p>
+            </>
+          )}
         </div>
       </div>
 

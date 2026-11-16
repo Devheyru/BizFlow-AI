@@ -14,6 +14,7 @@ interface TenantHeaderProps {
   user: User;
   activeOrganizations?: OrganizationSummary[];
   canViewProducts?: boolean;
+  canViewInventory?: boolean;
 }
 
 export function TenantHeader({
@@ -22,6 +23,7 @@ export function TenantHeader({
   user,
   activeOrganizations = [],
   canViewProducts = false,
+  canViewInventory = false,
 }: TenantHeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
@@ -37,6 +39,7 @@ export function TenantHeader({
             slug={organization.slug}
             role={role}
             canViewProducts={canViewProducts}
+            canViewInventory={canViewInventory}
           />
         </div>
 

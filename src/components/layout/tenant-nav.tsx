@@ -3,23 +3,30 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Package } from "lucide-react";
+import { LayoutDashboard, Users, Package, Warehouse } from "lucide-react";
 import type { AppRole } from "@/types/auth";
 
 interface TenantNavProps {
   slug: string;
   role: AppRole;
   canViewProducts?: boolean;
+  canViewInventory?: boolean;
 }
 
 /**
- * Tenant Navigation Bar (T045, FR-001, Feature 003 T027)
+ * Tenant Navigation Bar (T045, FR-001, Feature 003 T027, Feature 004 F004-UI-02)
  * Displays navigation links for the active tenant workspace.
  * Gated by permission and role:
  * - Products navigation item is gated strictly by the authoritative canViewProducts boolean (products:read).
+ * - Inventory navigation item is gated strictly by the authoritative canViewInventory boolean (inventory:read).
  * - Employees navigation item is shown only for Owner, Admin, and Manager.
  */
-export function TenantNav({ slug, role, canViewProducts = false }: TenantNavProps) {
+export function TenantNav({
+  slug,
+  role,
+  canViewProducts = false,
+  canViewInventory = false,
+}: TenantNavProps) {
   const pathname = usePathname();
   const currentPath = pathname ?? "";
   const canViewEmployees = role === "owner" || role === "admin" || role === "manager";
@@ -38,6 +45,16 @@ export function TenantNav({ slug, role, canViewProducts = false }: TenantNavProp
             href: `/${slug}/products`,
             icon: Package,
             active: currentPath.startsWith(`/${slug}/products`),
+          },
+        ]
+      : []),
+    ...(canViewInventory === true
+      ? [
+          {
+            name: "Inventory",
+            href: `/${slug}/inventory`,
+            icon: Warehouse,
+            active: currentPath.startsWith(`/${slug}/inventory`),
           },
         ]
       : []),

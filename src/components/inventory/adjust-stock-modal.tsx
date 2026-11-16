@@ -44,6 +44,8 @@ export interface AdjustStockModalProps {
   isDiscrete?: boolean;
   productStatus?: string;
   canAdjustStock: boolean;
+  hasInitialMovement?: boolean;
+  canReceiveStock?: boolean;
   onAdjustmentSuccess?: (result: StockMutationResult) => void;
 }
 
@@ -68,6 +70,8 @@ export function AdjustStockModal({
   isDiscrete = false,
   productStatus = "active",
   canAdjustStock,
+  hasInitialMovement = false,
+  canReceiveStock = true,
   onAdjustmentSuccess,
 }: AdjustStockModalProps) {
   const modalTitleId = useId();
@@ -390,6 +394,22 @@ export function AdjustStockModal({
             {/* Inputs Section */}
             {!successResult && (
               <div className="space-y-4">
+                {/* Initial Stock Guidance Tip for zero-stock products with NO history (Feature 004, F004-UI-01) */}
+                {currentStock === 0 && !hasInitialMovement && productStatus === "active" && canReceiveStock && (
+                  <div
+                    data-testid="adjust-initial-stock-guidance"
+                    className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-900 dark:text-emerald-200 flex items-start gap-2.5 text-xs"
+                  >
+                    <Package className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold block">Looking to record Initial Opening Stock?</span>
+                      <span className="text-emerald-800 dark:text-emerald-300">
+                        For a newly created product with no history, use the <strong>Opening Stock</strong> button on the inventory table to establish an audited baseline balance. Manual Delta below is for adjusting existing stock.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Movement Type Radio Grid */}
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-2">
