@@ -122,7 +122,12 @@ console.assert(hash2 === '7e2b11299620db0e9531afe7b999c1d1096b39b7f860d67be5efc5
 const payload3 = '{\"canonical_quantity\":\"12.5000\",\"movement_type\":\"damage\",\"organization_id\":\"a0000000-0000-0000-0000-000000000001\",\"product_id\":\"b0000000-0000-0000-0000-000000000002\",\"quantity_semantics\":\"quantity_delta\",\"reason\":\"Broken \\\"glass\\\" & \\\\backslashes\\\\\",\"reference_id\":\"REF \\\"A-12\\\\34\\\"\"}';
 const hash3 = crypto.createHash('sha256').update(payload3, 'utf8').digest('hex');
 console.assert(hash3 === '596a760972b11657cebb84a84a5b4541252b3f5c1d1d781a00c4686aeb7c0a3f', 'Hash 3 failed');
-console.log('All 3 regression hash fixtures verified successfully.');
+
+const payload4 = '{\"canonical_quantity\":\"-12.5000\",\"movement_type\":\"damage\",\"organization_id\":\"a0000000-0000-0000-0000-000000000001\",\"product_id\":\"b0000000-0000-0000-0000-000000000002\",\"quantity_semantics\":\"quantity_delta\",\"reason\":\"Broken \\\"glass\\\" & \\\\backslashes\\\\\",\"reference_id\":\"REF \\\"A-12\\\\34\\\"\"}';
+const hash4 = crypto.createHash('sha256').update(payload4, 'utf8').digest('hex');
+console.assert(hash4 === '16471066ea8ce4b412afa8bebd250abf19bb653de78d01da8d507f1e8e305f26', 'Hash 4 failed');
+
+console.log('All 4 regression hash fixtures verified successfully.');
 "
 ```
 

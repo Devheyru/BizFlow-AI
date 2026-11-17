@@ -215,6 +215,7 @@ Fetches paginated, filterable inventory items for the primary inventory table.
     reorderQuantity: number | null;
     stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
     version: number;
+    hasInitialMovement: boolean;
     unitCost: number | null; // Protected
     totalValue: number | null; // Protected
     currency: string | null;
@@ -243,6 +244,30 @@ Retrieves current inventory balance, threshold parameters, and product metadata 
   ): Promise<ActionResult<InventoryProductDetail>>
   ```
 - **Permission Required**: `inventory:read`
+- **Return Data Structure**:
+  ```typescript
+  export interface InventoryProductDetail {
+    productId: string;
+    productName: string;
+    sku: string;
+    barcode: string | null;
+    unitOfMeasure: string;
+    isDiscrete: boolean;
+    productStatus: 'active' | 'inactive' | 'archived';
+    quantity: number;
+    reorderPoint: number | null;
+    reorderQuantity: number | null;
+    stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
+    version: number;
+    lastMovementAt: string | null;
+    canViewMovementHistory?: boolean;
+    movementHistoryError?: string | null;
+    hasInitialMovement?: boolean;
+    unitCost?: number | null;
+    totalValue?: number | null;
+    currency?: string | null;
+  }
+  ```
 
 ---
 

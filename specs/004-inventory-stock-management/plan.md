@@ -501,3 +501,16 @@ flowchart LR
 2. **Feature 002 Dependency**: RBAC authorization uses `public.check_user_permission(org_id, auth.uid(), perm_key)`. Predefined roles are `owner`, `admin`, `manager`, `cashier`.
 3. **Feature 003 Dependency**: Catalog items reside in `public.products`. When products are created, `trg_provision_inventory_anchor` creates a zero-balance `inventory` row. UOM constraints conform to `chk_products_uom`.
 4. **Feature 005 Integration Hand-off**: POS sales and returns are deferred to Feature 005. Feature 004 RPC strictly blocks `sale` and `return` (`INVALID_MOVEMENT_TYPE`), while Layer 1 `_execute_inventory_mutation_core` provides the trusted engine for Feature 005.
+
+---
+
+## Feature 004 Completion Status & Sign-off
+
+- **Phases 1–12**: Completed and verified (T001–T047).
+- **Phase 13 (Physical Testing Remediations)**: Completed and verified:
+  - F004-UI-01: Initial opening stock discoverability via prominent action button on inventory table.
+  - F004-UI-02: Permission-aware inventory navigation gating across desktop and mobile.
+  - Finding 6: 4-state movement history presentation (authorized, empty, restricted, error).
+  - Initial stock eligibility edge case: strict movement history invariance check across modals and tables.
+- **Automated Test Suite Status**: 905 unit tests passed across 66 files (100% pass rate). Zero TypeScript errors. Zero ESLint warnings. Production build succeeds cleanly.
+- **Classification**: RELEASE READY WITH DOCUMENTED LIMITATIONS (Owner-approved UI performance deviation documented; ready for Feature 005 commencement).

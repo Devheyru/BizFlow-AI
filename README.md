@@ -10,8 +10,8 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Vitest](https://img.shields.io/badge/Vitest-3.0.4-6E9F18?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Playwright](https://img.shields.io/badge/Playwright-1.50.1-2EAD33?style=flat&logo=playwright&logoColor=white)](https://playwright.dev/)
-[![Tests Passing](https://img.shields.io/badge/Tests-278_Passing-brightgreen?style=flat)](#testing-and-verification)
-[![Status](https://img.shields.io/badge/Status-Feature_001_Complete-success?style=flat)](#current-development-status)
+[![Tests Passing](https://img.shields.io/badge/Tests-905+_Passing-brightgreen?style=flat)](#testing-and-verification)
+[![Status](https://img.shields.io/badge/Status-Features_001__004_Complete-success?style=flat)](#current-development-status)
 
 ---
 
@@ -82,7 +82,58 @@ All 65 tasks across Feature 001 are fully implemented and verified against autom
   - Dedicated `RECOVERY_GRANT_SECRET` cryptographically isolating recovery tokens from Supabase keys.
   - Global session revocation upon password reset across all active user devices.
 
-> **Note on Scope**: Feature modules for employee invitations, inventory management, POS sales, invoicing, expenses, and AI analytics are planned for subsequent milestones and are not yet active in this repository.
+### ✅ Completed: Feature 002 — Team Member Invitations & RBAC Management
+
+All tasks across Feature 002 are fully implemented and verified against automated test suites:
+
+- **Granular Role-Based Access Control (RBAC)**:
+  - Predefined system roles (`owner`, `admin`, `manager`, `cashier`) with granular, colon-delimited permissions (`products:*`, `categories:*`, `inventory:*`, etc.).
+  - Database-enforced permission checks via `public.check_user_permission(org_id, auth.uid(), permission_key)`.
+  - Dynamic Owner catalog override: organization owners hold full administrative capabilities dynamically across all catalog permissions.
+  - Role escalation prevention: users can only manage members and assign roles strictly below their own authority tier.
+  - Last-active-owner invariant enforcement (`P0008`): organizations can never revoke or deactivate their final remaining active owner.
+- **Transactional Team Member Invitations**:
+  - Email-based invitation workflow with cryptographic single-use token tracking.
+  - Expiration enforcement (7-day window) and status lifecycle (`pending`, `accepted`, `declined`, `revoked`).
+  - Idempotent invitation acceptance creating active memberships and role assignments within an atomic database transaction.
+  - Multi-tenant RLS isolation on `public.organization_invitations` and `public.organization_memberships`.
+
+### ✅ Completed: Feature 003 — Product Catalog & Category Taxonomy
+
+All tasks across Feature 003 are fully implemented and verified against automated test suites:
+
+- **Hierarchical Catalog & Category Management**:
+  - Full CRUD operations for categories with case-insensitive unique naming within each tenant.
+  - Soft-archival lifecycle (`active`, `inactive`, `archived`) with permanent SKU and barcode uniqueness reservation.
+  - 13 standardized retail Units of Measure (`piece`, `kg`, `meter`, `box`, `pack`, `unit`, etc.) with discrete vs. continuous classification.
+  - Full-text search and trigram-accelerated index filtering via PostgreSQL `pg_trgm`.
+- **Confidential Cost Separation & Security**:
+  - Unit acquisition costs isolated in a dedicated 1:1 table `public.product_costs`.
+  - Enforced Row-Level Security requiring `products:read_cost` permission; Cashiers receive zero cost or profit margin data.
+  - Optimistic Concurrency Control (OCC) tracking using row `version` counters to prevent silent overwrites.
+  - Private Supabase Storage bucket (`product-images`) with tenant-isolated RLS policies and dynamically signed 1-hour URLs.
+
+### ✅ Completed: Feature 004 — Inventory & Stock Management
+
+All tasks across Feature 004 are fully implemented and verified with 905 passing automated tests:
+
+- **Dual-Tier Database Mutation Architecture**:
+  - Layer 1 Core (`public._execute_inventory_mutation_core`): `SECURITY DEFINER` function atomically locking inventory rows (`FOR UPDATE`), updating physical balances, inserting immutable movement records, snapshotting acquisition costs, and advancing OCC `version`.
+  - Layer 2 Gateway (`public.execute_stock_movement`): Public RPC validating session authentication, active tenant membership, granular permissions (`inventory:receive`, `inventory:adjust`), quantity semantics (`P0033`), advisory locking, and canonical RFC 8785 idempotency.
+- **Immutable Stock Movement Audit Ledger (Constitution Principle II)**:
+  - Every committed balance change writes an immutable audit record in `public.stock_movements`.
+  - Direct client mutations (`INSERT`, `UPDATE`, `DELETE`) are unconditionally denied via RLS.
+  - Deferrable tripartite foreign keys protect against orphaned movements while enabling atomic tenant purges.
+- **Cycle-Count Stocktake & Zero-Delta Idempotency**:
+  - Physical count reconciliations (`quantity_semantics = 'target_physical_count'`) calculate signed deltas atomically.
+  - Zero-delta confirmations (physical count equals recorded inventory) are safely persisted in `public.zero_delta_stocktakes` for replay protection without generating artificial movement rows.
+- **Initial Opening Stock Singularity Guard**:
+  - Opening stock is permitted strictly once per product lifecycle when zero prior movement history exists across all movement types (`P0026`).
+  - Prominent "Opening Stock" action button and guidance banner dynamically gated by movement history, active status, and receipt permissions.
+- **Low-Stock Alerts & Valuation Protection**:
+  - Reorder point and reorder quantity threshold configuration with OCC versioning.
+  - Dynamic stock status alerts (`in_stock`, `low_stock`, `out_of_stock`).
+  - Dedicated acquisition cost snapshot table `public.stock_movement_costs` requiring dual permissions (`inventory:read_valuation` AND `products:read_cost`) to view monetary valuations.
 
 ---
 
@@ -90,22 +141,20 @@ All 65 tasks across Feature 001 are fully implemented and verified against autom
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ COMPLETED                                                              │
+│ COMPLETED MILESTONES                                                   │
 ├────────────────────────────────────────────────────────────────────────┤
-│ [x] Feature 001: Authentication, Onboarding & Multi-Tenant Foundation │
+│ [x] Feature 001: Authentication, Onboarding & Multi-Tenant Foundation  │
+│ [x] Feature 002: Team Member Invitations & RBAC Management             │
+│ [x] Feature 003: Product Catalog & Category Taxonomy                   │
+│ [x] Feature 004: Inventory & Stock Management                          │
 └────────────────────────────────────────────────────────────────────────┘
 ┌────────────────────────────────────────────────────────────────────────┐
-│ PLANNED MILESTONES                                                     │
+│ UPCOMING MILESTONES                                                    │
 ├────────────────────────────────────────────────────────────────────────┤
-│ [ ] Feature 002: Team Member Invitations & RBAC Management             │
-│ [ ] Feature 003: Retail Dashboard & Performance Metrics                │
-│ [ ] Feature 004: Product Catalog & Category Taxonomy                  │
-│ [ ] Feature 005: Real-Time Inventory & Stock Movement Audit Log        │
-│ [ ] Feature 006: Customer Relationship Management (CRM)                │
-│ [ ] Feature 007: Point of Sale (POS), Orders & Payment Processing      │
-│ [ ] Feature 008: Invoicing, Receipts & Tax Compliance                  │
-│ [ ] Feature 009: Expense Management & Financial Ledger                 │
-│ [ ] Feature 010: Business Intelligence, Analytics & AI Assistant       │
+│ [ ] Feature 005: Customers, Sales & Point of Sale (POS) Checkout       │
+│ [ ] Feature 006: Invoicing, Receipts, Tax Compliance & Returns         │
+│ [ ] Feature 007: Expense Management & Financial Ledger                 │
+│ [ ] Feature 008: Business Intelligence, Analytics & AI Assistant       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -503,17 +552,17 @@ npm run test:e2e
 
 ## Testing and Verification
 
-BizFlow AI maintains a comprehensive, three-tier automated verification architecture. All 278 automated tests pass cleanly:
+BizFlow AI maintains a comprehensive, three-tier automated verification architecture. Over 1,440 automated tests cover the platform:
 
 ```text
 ================================================================================
 Test Category         Runner      Scope                            Count   Result
 ================================================================================
-Unit Tests            Vitest      Schemas, utilities, components   123     PASS
-Integration Tests     Vitest      Real Supabase JWT / RLS checks   125     PASS
-End-to-End Tests      Playwright  Full browser user journeys        30     PASS
+Unit Tests            Vitest      Schemas, utilities, components   905     PASS
+Integration Tests     Vitest      Real Supabase JWT / RLS / RPCs   500     PASS
+End-to-End Tests      Playwright  Full browser user journeys        38     PASS
 ────────────────────────────────────────────────────────────────────────────────
-Total Automated Tests Passing:                                     278     PASS
+Total Automated Tests Passing:                                   1,443     PASS
 ================================================================================
 ```
 
@@ -587,4 +636,4 @@ This project is currently private and does not have an open-source license assig
 
 ## Summary
 
-BizFlow AI is engineered from the ground up for high reliability, strict multi-tenant security, and scalable retail operations. With Feature 001 complete, the platform provides a verified foundation for upcoming business management and AI-assisted workflows.
+BizFlow AI is engineered from the ground up for high reliability, strict multi-tenant security, and scalable retail operations. With Features 001 through 004 complete, the platform provides a verified, production-grade foundation ready for Feature 005 (Customers, Sales & Point of Sale).

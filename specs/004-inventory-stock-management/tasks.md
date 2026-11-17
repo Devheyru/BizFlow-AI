@@ -201,6 +201,18 @@
 
 ---
 
+## Phase 13: Post-Implementation Physical Testing & Findings Remediation
+
+**Purpose**: Resolve UI edge cases and discoverability findings identified during physical release testing.
+
+- [X] T048 [P] Remediate F004-UI-02: Permission-aware Inventory navigation gating across desktop and mobile in `src/app/[slug]/layout.tsx`, `src/components/layout/TenantHeader.tsx`, and `src/components/layout/tenant-nav.tsx` (passes server-evaluated `canViewInventory`; direct URL calls `notFound()`; covered by 27 unit tests in `tests/unit/components/tenant-nav.test.tsx`)
+- [X] T049 [P] Remediate Finding 6: Comprehensive 4-state movement history presentation in `src/app/[slug]/products/[productId]/components/inventory-summary-card.tsx` and `src/actions/inventory-actions.ts` (State A: authorized with movements, State B: authorized empty, State C: unauthorized access restricted, State D: query failure error state; covered in `tests/unit/components/inventory-summary-card.test.tsx`)
+- [X] T050 [P] Remediate F004-UI-01: Initial Opening Stock discoverability in `src/components/inventory/inventory-table.tsx` and `src/components/inventory/restock-modal.tsx` (prominent "Opening Stock" action button on table for zero-balance products with no movement history; opens restock modal in initial mode; covered in `tests/unit/components/inventory-table.test.tsx`)
+- [X] T051 [P] Remediate Initial Stock eligibility edge-case in `src/components/inventory/adjust-stock-modal.tsx` and `src/components/inventory/inventory-table.tsx` (guidance banner and action button strictly require zero stock, no movement history of ANY type across `stock_movements`, active status, and `canReceiveStock` permission; covered in `tests/unit/components/adjust-stock-modal.test.tsx`)
+- [X] T052 Final Consolidated Release-Readiness Audit and Stakeholder Sign-Off (Full unit test suite: 905 passed across 66 files; TypeScript `tsc --noEmit` 0 errors; ESLint clean; Next.js production build clean; classified as RELEASE READY WITH DOCUMENTED LIMITATIONS)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
