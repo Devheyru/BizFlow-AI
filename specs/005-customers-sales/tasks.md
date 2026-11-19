@@ -29,35 +29,35 @@
 
 **Purpose**: Database migration — 9 tables, 11 RPCs, 12 permissions, column-level security, RLS
 
-- [ ] T001 Create migration file `supabase/migrations/20261117000021_customers_sales_schema.sql` with header comments and transaction wrapper
-- [ ] T002 Define `public.customers` table with all columns, CHECK constraints, composite unique indexes (`uq_customers_org_id`, `uq_customers_org_phone`, `uq_customers_org_email`), and composite FK to `organizations` per `specs/005-customers-sales/data-model.md` Table 1
-- [ ] T003 Define `public.organization_tax_settings` table with PK `(organization_id)`, CHECK constraints on `tax_rate` (0–100) and `tax_name`, FK to `organizations`, per `data-model.md` Table 2
-- [ ] T004 Define `public.sale_sequences` table with composite PK `(organization_id, sequence_type, date_key)`, CHECK on `sequence_type IN ('sale', 'return')`, DEFAULT 0, per `data-model.md` Table 9
-- [ ] T005 Define `public.sales` table with all columns, composite FKs (`fk_sales_org`, `fk_sales_org_customer`), composite unique indexes, CHECK constraints on monetary columns, per `data-model.md` Table 3
-- [ ] T006 Define `public.sale_items` table with all columns including `unit_cost NUMERIC(14,4) NULL`, composite FKs (`fk_sale_items_org_sale`, `fk_sale_items_org_product`), composite unique indexes (`uq_sale_items_org_id`, `uq_sale_items_org_sale_item_prod`, `uq_sale_items_sale_product`), FK to `stock_movements`, per `data-model.md` Table 4
-- [ ] T007 Define `public.payments` table with all columns, composite FK, partial unique index on `(organization_id, payment_method, reference_no) WHERE reference_no IS NOT NULL`, CHECK constraints, per `data-model.md` Table 5
-- [ ] T008 Define `public.sale_returns` table with all columns, composite FKs (`fk_sale_returns_org_sale`), composite unique indexes (`uq_sale_returns_org_id`, `uq_sale_returns_org_sale_id`), per `data-model.md` Table 6
-- [ ] T009 Define `public.sale_return_items` table with all columns, composite FKs (`fk_return_items_org_return_sale`, `fk_return_items_org_sale_item_prod`), CHECK constraints, per `data-model.md` Table 7
-- [ ] T010 Define `public.refunds` table with all columns including `obligation_refund_id UUID NOT NULL`, composite FKs with `fk_refunds_org_obligation` as `DEFERRABLE INITIALLY DEFERRED`, partial unique indexes (`uq_refunds_org_obligation_active`, `uq_refunds_org_confirmation_key`, `uq_refunds_org_idempotency_key`), per `data-model.md` Table 8
-- [ ] T011 Enable and force RLS on all 9 tables: `ALTER TABLE public.<table> ENABLE ROW LEVEL SECURITY; ALTER TABLE public.<table> FORCE ROW LEVEL SECURITY;`
-- [ ] T012 Create RLS SELECT policies using `check_user_permission(organization_id, auth.uid(), '<permission>')` for all 9 tables per `data-model.md` RLS Policies sections
-- [ ] T013 Create RLS deny-all DML policies (`FOR ALL TO authenticated USING (false) WITH CHECK (false)`) for all 9 tables
-- [ ] T014 Implement column-level security on `sale_items`: `REVOKE SELECT ON TABLE public.sale_items FROM authenticated, anon, PUBLIC;` then `GRANT SELECT (id, organization_id, sale_id, product_id, quantity, unit_price, line_discount_amount, allocated_order_disc, taxable_amount, allocated_tax_amount, total_price, movement_id, created_at) ON TABLE public.sale_items TO authenticated;` per `data-model.md` Security Grants section
-- [ ] T015 Create `updated_at` triggers for `customers`, `organization_tax_settings`, `sales`, `refunds`, `sale_sequences` using `handle_updated_at()` per `data-model.md` Updated Trigger section
-- [ ] T016 Insert 12 permissions into `public.permissions` and role-permission mappings into `public.role_permissions` per `data-model.md` Permissions section
-- [ ] T017 Implement RPC `public.execute_sale` with full PL/pgSQL body per `contracts/database-rpcs.md` §1 (18 preconditions, canonical hash, inventory mutation, sequence generation, tax calculation, payment recording)
-- [ ] T018 Implement RPC `public.void_sale` with full PL/pgSQL body per `contracts/database-rpcs.md` §2 (ascending product_id locks, inventory restoration, cash/external refund creation with self-referencing deferred obligation FK, F005-038/039 reconciliation)
-- [ ] T019 Implement RPC `public.execute_sale_return` with full PL/pgSQL body per `contracts/database-rpcs.md` §3 (proportional refund, restock toggle, sequence generation, self-referencing deferred obligation FK, F005-039 reconciliation)
-- [ ] T020 Implement RPC `public.confirm_refund_reimbursement` with full PL/pgSQL body per `contracts/database-rpcs.md` §4 (F005-046 Cases A–E, advisory lock, cross-refund collision check, confirmation hash)
-- [ ] T021 Implement RPC `public.record_refund_failure` with full PL/pgSQL body per `contracts/database-rpcs.md` §5 (status transition, F005-039 reconciliation)
-- [ ] T022 Implement RPC `public.issue_replacement_refund` with full PL/pgSQL body per `contracts/database-rpcs.md` §6 (unconditional obligation advisory lock, lineage inheritance, F005-044 obligation tracking)
-- [ ] T023 Implement RPC `public.create_customer` with full PL/pgSQL body per `contracts/database-rpcs.md` §7 (normalization, partial uniqueness, tenant scoping)
-- [ ] T024 Implement RPC `public.update_customer` with full PL/pgSQL body per `contracts/database-rpcs.md` §8
-- [ ] T025 Implement RPC `public.archive_customer` with full PL/pgSQL body per `contracts/database-rpcs.md` §9 (idempotent archival, uniqueness release)
-- [ ] T026 Implement RPC `public.update_tax_settings` with full PL/pgSQL body per `contracts/database-rpcs.md` §10 (upsert, Owner/Admin authorization)
-- [ ] T027 Implement RPC `public.get_sale_detail` with full PL/pgSQL body per `contracts/database-rpcs.md` §11 (SECURITY DEFINER, dual-permission cost evaluation: `inventory:read_valuation` AND `products:read_cost`, conditional unit_cost projection)
-- [ ] T028 Set ownership (`OWNER TO postgres`), security (`SECURITY DEFINER`, `SET search_path`), and grants (`REVOKE ALL FROM PUBLIC, anon, service_role; GRANT EXECUTE TO authenticated`) for all 11 RPCs per `contracts/database-rpcs.md` Common Conventions
-- [ ] T029 Verify migration: run `npx supabase db reset`, confirm all 905+ existing F001–F004 tests pass, run schema verification queries from `quickstart.md`
+- [x] T001 Create migration file `supabase/migrations/20261117000021_customers_sales_schema.sql` with header comments and transaction wrapper
+- [x] T002 Define `public.customers` table with all columns, CHECK constraints, composite unique indexes (`uq_customers_org_id`, `uq_customers_org_phone`, `uq_customers_org_email`), and composite FK to `organizations` per `specs/005-customers-sales/data-model.md` Table 1
+- [x] T003 Define `public.organization_tax_settings` table with PK `(organization_id)`, CHECK constraints on `tax_rate` (0–100) and `tax_name`, FK to `organizations`, per `data-model.md` Table 2
+- [x] T004 Define `public.sale_sequences` table with composite PK `(organization_id, sequence_type, date_key)`, CHECK on `sequence_type IN ('sale', 'return')`, DEFAULT 0, per `data-model.md` Table 9
+- [x] T005 Define `public.sales` table with all columns, composite FKs (`fk_sales_org`, `fk_sales_org_customer`), composite unique indexes, CHECK constraints on monetary columns, per `data-model.md` Table 3
+- [x] T006 Define `public.sale_items` table with all columns including `unit_cost NUMERIC(14,4) NULL`, composite FKs (`fk_sale_items_org_sale`, `fk_sale_items_org_product`), composite unique indexes (`uq_sale_items_org_id`, `uq_sale_items_org_sale_item_prod`, `uq_sale_items_sale_product`), FK to `stock_movements`, per `data-model.md` Table 4
+- [x] T007 Define `public.payments` table with all columns, composite FK, partial unique index on `(organization_id, payment_method, reference_no) WHERE reference_no IS NOT NULL`, CHECK constraints, per `data-model.md` Table 5
+- [x] T008 Define `public.sale_returns` table with all columns, composite FKs (`fk_sale_returns_org_sale`), composite unique indexes (`uq_sale_returns_org_id`, `uq_sale_returns_org_sale_id`), per `data-model.md` Table 6
+- [x] T009 Define `public.sale_return_items` table with all columns, composite FKs (`fk_return_items_org_return_sale`, `fk_return_items_org_sale_item_prod`), CHECK constraints, per `data-model.md` Table 7
+- [x] T010 Define `public.refunds` table with all columns including `obligation_refund_id UUID NOT NULL`, composite FKs with `fk_refunds_org_obligation` as `DEFERRABLE INITIALLY DEFERRED`, partial unique indexes (`uq_refunds_org_obligation_active`, `uq_refunds_org_confirmation_key`, `uq_refunds_org_idempotency_key`), per `data-model.md` Table 8
+- [x] T011 Enable and force RLS on all 9 tables: `ALTER TABLE public.<table> ENABLE ROW LEVEL SECURITY; ALTER TABLE public.<table> FORCE ROW LEVEL SECURITY;`
+- [x] T012 Create RLS SELECT policies using `check_user_permission(organization_id, auth.uid(), '<permission>')` for all 9 tables per `data-model.md` RLS Policies sections
+- [x] T013 Create RLS deny-all DML policies (`FOR ALL TO authenticated USING (false) WITH CHECK (false)`) for all 9 tables
+- [x] T014 Implement column-level security on `sale_items`: `REVOKE SELECT ON TABLE public.sale_items FROM authenticated, anon, PUBLIC;` then `GRANT SELECT (id, organization_id, sale_id, product_id, quantity, unit_price, line_discount_amount, allocated_order_disc, taxable_amount, allocated_tax_amount, total_price, movement_id, created_at) ON TABLE public.sale_items TO authenticated;` per `data-model.md` Security Grants section
+- [x] T015 Create `updated_at` triggers for `customers`, `organization_tax_settings`, `sales`, `refunds`, `sale_sequences` using `handle_updated_at()` per `data-model.md` Updated Trigger section
+- [x] T016 Insert 12 permissions into `public.permissions` and role-permission mappings into `public.role_permissions` per `data-model.md` Permissions section
+- [x] T017 Implement RPC `public.execute_sale` with full PL/pgSQL body per `contracts/database-rpcs.md` §1 (18 preconditions, canonical hash, inventory mutation, sequence generation, tax calculation, payment recording)
+- [x] T018 Implement RPC `public.void_sale` with full PL/pgSQL body per `contracts/database-rpcs.md` §2 (ascending product_id locks, inventory restoration, cash/external refund creation with self-referencing deferred obligation FK, F005-038/039 reconciliation)
+- [x] T019 Implement RPC `public.execute_sale_return` with full PL/pgSQL body per `contracts/database-rpcs.md` §3 (proportional refund, restock toggle, sequence generation, self-referencing deferred obligation FK, F005-039 reconciliation)
+- [x] T020 Implement RPC `public.confirm_refund_reimbursement` with full PL/pgSQL body per `contracts/database-rpcs.md` §4 (F005-046 Cases A–E, advisory lock, cross-refund collision check, confirmation hash)
+- [x] T021 Implement RPC `public.record_refund_failure` with full PL/pgSQL body per `contracts/database-rpcs.md` §5 (status transition, F005-039 reconciliation)
+- [x] T022 Implement RPC `public.issue_replacement_refund` with full PL/pgSQL body per `contracts/database-rpcs.md` §6 (unconditional obligation advisory lock, lineage inheritance, F005-044 obligation tracking)
+- [x] T023 Implement RPC `public.create_customer` with full PL/pgSQL body per `contracts/database-rpcs.md` §7 (normalization, partial uniqueness, tenant scoping)
+- [x] T024 Implement RPC `public.update_customer` with full PL/pgSQL body per `contracts/database-rpcs.md` §8
+- [x] T025 Implement RPC `public.archive_customer` with full PL/pgSQL body per `contracts/database-rpcs.md` §9 (idempotent archival, uniqueness release)
+- [x] T026 Implement RPC `public.update_tax_settings` with full PL/pgSQL body per `contracts/database-rpcs.md` §10 (upsert, Owner/Admin authorization)
+- [x] T027 Implement RPC `public.get_sale_detail` with full PL/pgSQL body per `contracts/database-rpcs.md` §11 (SECURITY DEFINER, dual-permission cost evaluation: `inventory:read_valuation` AND `products:read_cost`, conditional unit_cost projection)
+- [x] T028 Set ownership (`OWNER TO postgres`), security (`SECURITY DEFINER`, `SET search_path`), and grants (`REVOKE ALL FROM PUBLIC, anon, service_role; GRANT EXECUTE TO authenticated`) for all 11 RPCs per `contracts/database-rpcs.md` Common Conventions
+- [x] T029 Verify migration: run `npx supabase db reset`, confirm all 905+ existing F001–F004 tests pass, run schema verification queries from `quickstart.md`
 
 **Checkpoint**: Database foundation is complete. All 9 tables, 11 RPCs, 12 permissions, column security, and RLS policies are deployed. `npx supabase db reset` succeeds with zero F001–F004 regressions.
 
