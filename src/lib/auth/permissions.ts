@@ -29,6 +29,19 @@ export const SYSTEM_PERMISSIONS = [
   "inventory:receive",
   "inventory:adjust",
   "inventory:history",
+  // Feature 005: Customers & Sales
+  "customers:read",
+  "customers:create",
+  "customers:update",
+  "customers:archive",
+  "sales:read",
+  "sales:create",
+  "sales:void",
+  "returns:read",
+  "returns:create",
+  "payments:read",
+  "refunds:read",
+  "tax_settings:update",
 ] as const;
 
 export type SystemPermission = (typeof SYSTEM_PERMISSIONS)[number];
@@ -61,6 +74,19 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
     "inventory:receive",
     "inventory:adjust",
     "inventory:history",
+    // Feature 005: Customers & Sales (all 12)
+    "customers:read",
+    "customers:create",
+    "customers:update",
+    "customers:archive",
+    "sales:read",
+    "sales:create",
+    "sales:void",
+    "returns:read",
+    "returns:create",
+    "payments:read",
+    "refunds:read",
+    "tax_settings:update",
   ],
   manager: [
     "employees:read",
@@ -76,11 +102,31 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
     "inventory:receive",
     "inventory:adjust",
     "inventory:history",
+    // Feature 005: Customers & Sales (11: all except tax_settings:update)
+    "customers:read",
+    "customers:create",
+    "customers:update",
+    "customers:archive",
+    "sales:read",
+    "sales:create",
+    "sales:void",
+    "returns:read",
+    "returns:create",
+    "payments:read",
+    "refunds:read",
   ],
   cashier: [
     "products:read",
     "categories:read",
     "inventory:read",
+    // Feature 005: Customers & Sales (7)
+    "customers:read",
+    "customers:create",
+    "customers:update",
+    "sales:read",
+    "sales:create",
+    "returns:read",
+    "payments:read",
   ],
 };
 
