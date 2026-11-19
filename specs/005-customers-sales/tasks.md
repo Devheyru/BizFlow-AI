@@ -69,15 +69,15 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T030 Add 12 new permission keys (`customers:read`, `customers:create`, `customers:update`, `customers:archive`, `sales:read`, `sales:create`, `sales:void`, `returns:read`, `returns:create`, `payments:read`, `refunds:read`, `tax_settings:update`) to `SYSTEM_PERMISSIONS` array in `src/lib/auth/permissions.ts`
-- [ ] T031 Add F005 role-permission mappings (Owner 12, Admin 12, Manager 11, Cashier 7) to `ROLE_PERMISSIONS` map in `src/lib/auth/permissions.ts` per `data-model.md` Permissions section
-- [ ] T032 [P] Extend `PermissionKey` union type with 12 new keys in `src/types/auth.ts`
-- [ ] T033 [P] Define customer domain types (`CustomerRecord`, `CustomerDetail`, `PaginatedCustomerResult`, `CustomerSearchQuery`) in `src/types/customers.ts` per `contracts/server-actions.md` §1
-- [ ] T034 [P] Define sales domain types (`SaleResult`, `SaleDetail`, `SaleItemRecord`, `PaymentRecord`, `ReturnRecord`, `RefundRecord`, `PaginatedSalesList`, `ReturnHistory`) in `src/types/sales.ts` per `contracts/server-actions.md` §2
-- [ ] T035 [P] Create customer Zod schemas (`createCustomerSchema`, `updateCustomerSchema`, `customerSearchSchema`) in `src/lib/validations/customers.ts` with E.164 phone regex, email format, name 1–255 chars per `contracts/server-actions.md` §4
-- [ ] T036 [P] Create sales Zod schemas (`executeSaleSchema`, `voidSaleSchema`, `executeSaleReturnSchema`, `confirmRefundSchema`, `recordRefundFailureSchema`, `issueReplacementRefundSchema`, `salesListQuerySchema`, `updateTaxSettingsSchema`) in `src/lib/validations/sales.ts` per `contracts/server-actions.md` §4
-- [ ] T037 [P] Create SQLSTATE → domain error code mapper `mapSalesError()` in `src/lib/sales/error-codes.ts` mapping P0011–P0067 and 23503/23505/22012 per spec error catalog
-- [ ] T038 Verify TypeScript compilation passes with all new types, schemas, and permissions: `npx tsc --noEmit`
+- [x] T030 Add 12 new permission keys (`customers:read`, `customers:create`, `customers:update`, `customers:archive`, `sales:read`, `sales:create`, `sales:void`, `returns:read`, `returns:create`, `payments:read`, `refunds:read`, `tax_settings:update`) to `SYSTEM_PERMISSIONS` array in `src/lib/auth/permissions.ts`
+- [x] T031 Add F005 role-permission mappings (Owner 12, Admin 12, Manager 11, Cashier 7) to `ROLE_PERMISSIONS` map in `src/lib/auth/permissions.ts` per `data-model.md` Permissions section
+- [x] T032 [P] Extend `PermissionKey` union type with 12 new keys in `src/types/auth.ts`
+- [x] T033 [P] Define customer domain types (`CustomerRecord`, `CustomerDetail`, `PaginatedCustomerResult`, `CustomerSearchQuery`) in `src/types/customers.ts` per `contracts/server-actions.md` §1
+- [x] T034 [P] Define sales domain types (`SaleResult`, `SaleDetail`, `SaleItemRecord`, `PaymentRecord`, `ReturnRecord`, `RefundRecord`, `PaginatedSalesList`, `ReturnHistory`) in `src/types/sales.ts` per `contracts/server-actions.md` §2
+- [x] T035 [P] Create customer Zod schemas (`createCustomerSchema`, `updateCustomerSchema`, `customerSearchSchema`) in `src/lib/validations/customers.ts` with E.164 phone regex, email format, name 1–255 chars per `contracts/server-actions.md` §4
+- [x] T036 [P] Create sales Zod schemas (`executeSaleSchema`, `voidSaleSchema`, `executeSaleReturnSchema`, `confirmRefundSchema`, `recordRefundFailureSchema`, `issueReplacementRefundSchema`, `salesListQuerySchema`, `updateTaxSettingsSchema`) in `src/lib/validations/sales.ts` per `contracts/server-actions.md` §4
+- [x] T037 [P] Create SQLSTATE → domain error code mapper `mapSalesError()` in `src/lib/sales/error-codes.ts` mapping P0011–P0067 and 23503/23505/22012 per spec error catalog
+- [x] T038 Verify TypeScript compilation passes with all new types, schemas, and permissions: `npx tsc --noEmit`
 
 **Checkpoint**: Foundation ready — all domain types, validation schemas, permission keys, and error mappers are compiled. User story implementation can begin.
 

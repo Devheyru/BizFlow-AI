@@ -107,10 +107,10 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
   });
 
   describe("Rule 3: Automatic Owner Access for Registered Permissions", () => {
-    it("grants Owner access to all 21 registered system permissions dynamically", () => {
+    it("grants Owner access to all 33 registered system permissions dynamically", () => {
       const ownerCtx = createMockContext("owner");
 
-      expect(SYSTEM_PERMISSIONS).toHaveLength(21);
+      expect(SYSTEM_PERMISSIONS).toHaveLength(33);
       for (const permission of SYSTEM_PERMISSIONS) {
         expect(hasPermission(ownerCtx, permission)).toBe(true);
       }
@@ -126,7 +126,7 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
   });
 
   describe("Rule 4: Deterministic Role-Permission Mappings for Non-Owners", () => {
-    it("grants Admin all 21 system permissions", () => {
+    it("grants Admin all 33 system permissions", () => {
       const adminCtx = createMockContext("admin");
 
       for (const permission of SYSTEM_PERMISSIONS) {
@@ -216,6 +216,84 @@ describe("T046: TypeScript hasPermission 4-Rule Resolution Engine (FR-032, FR-03
       expect(hasPermission(cashierNoPerms, "categories:read")).toBe(true);
       expect(hasPermission(cashierNoPerms, "products:create")).toBe(false);
       expect(hasPermission(cashierNoPerms, "products:read_cost")).toBe(false);
+    });
+  });
+
+  describe("Feature 005: Customers & Sales Permissions (T030, T031)", () => {
+    const F005_PERMISSIONS = [
+      "customers:read",
+      "customers:create",
+      "customers:update",
+      "customers:archive",
+      "sales:read",
+      "sales:create",
+      "sales:void",
+      "returns:read",
+      "returns:create",
+      "payments:read",
+      "refunds:read",
+      "tax_settings:update",
+    ] as const;
+
+    it("registers all 12 Feature 005 permissions exactly once in SYSTEM_PERMISSIONS", () => {
+      for (const perm of F005_PERMISSIONS) {
+        const matches = SYSTEM_PERMISSIONS.filter((p) => p === perm);
+        expect(matches).toHaveLength(1);
+      }
+    });
+
+    it("grants Owner all 12 Feature 005 permissions", () => {
+      const ownerCtx = createMockContext("owner");
+      for (const perm of F005_PERMISSIONS) {
+        expect(hasPermission(ownerCtx, perm)).toBe(true);
+      }
+    });
+
+    it("grants Admin all 12 Feature 005 permissions", () => {
+      const adminCtx = createMockContext("admin");
+      for (const perm of F005_PERMISSIONS) {
+        expect(hasPermission(adminCtx, perm)).toBe(true);
+      }
+    });
+
+    it("grants Manager exactly 11 Feature 005 permissions (denying tax_settings:update)", () => {
+      const managerCtx = createMockContext("manager");
+
+      // 11 granted
+      expect(hasPermission(managerCtx, "customers:read")).toBe(true);
+      expect(hasPermission(managerCtx, "customers:create")).toBe(true);
+      expect(hasPermission(managerCtx, "customers:update")).toBe(true);
+      expect(hasPermission(managerCtx, "customers:archive")).toBe(true);
+      expect(hasPermission(managerCtx, "sales:read")).toBe(true);
+      expect(hasPermission(managerCtx, "sales:create")).toBe(true);
+      expect(hasPermission(managerCtx, "sales:void")).toBe(true);
+      expect(hasPermission(managerCtx, "returns:read")).toBe(true);
+      expect(hasPermission(managerCtx, "returns:create")).toBe(true);
+      expect(hasPermission(managerCtx, "payments:read")).toBe(true);
+      expect(hasPermission(managerCtx, "refunds:read")).toBe(true);
+
+      // 1 strictly denied
+      expect(hasPermission(managerCtx, "tax_settings:update")).toBe(false);
+    });
+
+    it("grants Cashier exactly 7 Feature 005 permissions and denies management/mutations", () => {
+      const cashierCtx = createMockContext("cashier");
+
+      // 7 granted
+      expect(hasPermission(cashierCtx, "customers:read")).toBe(true);
+      expect(hasPermission(cashierCtx, "customers:create")).toBe(true);
+      expect(hasPermission(cashierCtx, "customers:update")).toBe(true);
+      expect(hasPermission(cashierCtx, "sales:read")).toBe(true);
+      expect(hasPermission(cashierCtx, "sales:create")).toBe(true);
+      expect(hasPermission(cashierCtx, "returns:read")).toBe(true);
+      expect(hasPermission(cashierCtx, "payments:read")).toBe(true);
+
+      // 5 strictly denied
+      expect(hasPermission(cashierCtx, "customers:archive")).toBe(false);
+      expect(hasPermission(cashierCtx, "sales:void")).toBe(false);
+      expect(hasPermission(cashierCtx, "returns:create")).toBe(false);
+      expect(hasPermission(cashierCtx, "refunds:read")).toBe(false);
+      expect(hasPermission(cashierCtx, "tax_settings:update")).toBe(false);
     });
   });
 });

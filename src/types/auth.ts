@@ -47,7 +47,20 @@ export type PermissionKey =
   | "inventory:read_valuation"
   | "inventory:receive"
   | "inventory:adjust"
-  | "inventory:history";
+  | "inventory:history"
+  // Feature 005: Customers & Sales
+  | "customers:read"
+  | "customers:create"
+  | "customers:update"
+  | "customers:archive"
+  | "sales:read"
+  | "sales:create"
+  | "sales:void"
+  | "returns:read"
+  | "returns:create"
+  | "payments:read"
+  | "refunds:read"
+  | "tax_settings:update";
 
 // ============================================================================
 // Server Action Result Pattern
