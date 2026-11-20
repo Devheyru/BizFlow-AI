@@ -91,15 +91,15 @@
 
 ### Implementation for User Story 2
 
-- [ ] T039 [US2] Implement `createCustomerAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1 (permission: `customers:create`, RPC: `create_customer`, revalidation)
-- [ ] T040 [US2] Implement `updateCustomerAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1
-- [ ] T041 [US2] Implement `archiveCustomerAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1
-- [ ] T042 [US2] Implement `searchCustomersAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1 (PostgREST `.from('customers')` with ilike search, pagination)
-- [ ] T043 [US2] Implement `getCustomerDetailAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1 (includes purchase count and last purchase date)
-- [ ] T044 [US2] Build customer list page with search bar, pagination, and status filter in `src/app/[slug]/customers/page.tsx`
-- [ ] T045 [US2] Build create/edit customer modal component in `src/components/customers/customer-form.tsx` with phone E.164 validation and email normalization feedback
-- [ ] T046 [US2] Build customer detail page with info tab and purchase history tab in `src/app/[slug]/customers/[customerId]/page.tsx`
-- [ ] T047 [US2] Build inline POS customer picker component in `src/components/customers/customer-picker.tsx` (search + inline creation modal for Phase 7 POS integration)
+- [x] T039 [US2] Implement `createCustomerAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1 (permission: `customers:create`, RPC: `create_customer`, revalidation)
+- [x] T040 [US2] Implement `updateCustomerAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1
+- [x] T041 [US2] Implement `archiveCustomerAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1
+- [x] T042 [US2] Implement `searchCustomersAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1 (PostgREST `.from('customers')` with ilike search, pagination)
+- [x] T043 [US2] Implement `getCustomerDetailAction` server action in `src/actions/customer-actions.ts` per `contracts/server-actions.md` §1 (includes purchase count and last purchase date)
+- [x] T044 [US2] Build customer list page with search bar, pagination, and status filter in `src/app/[slug]/customers/page.tsx`
+- [x] T045 [US2] Build create/edit customer modal component in `src/components/customers/customer-form.tsx` with phone E.164 validation and email normalization feedback
+- [x] T046 [US2] Build customer detail page with info tab and purchase history tab in `src/app/[slug]/customers/[customerId]/page.tsx`
+- [x] T047 [US2] Build inline POS customer picker component in `src/components/customers/customer-picker.tsx` (search + inline creation modal for Phase 7 POS integration)
 
 **Checkpoint**: Customer CRUD is fully functional. Customers can be created, searched, updated, archived. Independently testable via customer management UI.
 
