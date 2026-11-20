@@ -7,6 +7,73 @@ describe("T037: Sales & Financial Error Code Mapper", () => {
     expect(KNOWN_SALES_ERRORS.P0040?.code).toBe("CUSTOMER_NOT_FOUND");
   });
 
+  describe("Critical Contract Verification (Feature 004 & Feature 005 Invariants)", () => {
+    it("strictly verifies authoritative error codes and distinguishes them from previously misattributed codes", () => {
+      // 1. P0011: Insufficient stock (Feature 004 core ledger exception)
+      expect(mapSalesError({ code: "P0011" })).toEqual({
+        code: "INSUFFICIENT_STOCK",
+        message: "Insufficient inventory stock for requested sale quantity.",
+        status: 422,
+      });
+
+      // 2. P0024: Idempotency conflict (Feature 004 / 005 replay with conflicting payload)
+      expect(mapSalesError({ code: "P0024" })).toEqual({
+        code: "IDEMPOTENCY_CONFLICT",
+        message: "Idempotency key has already been used with different request parameters.",
+        status: 409,
+      });
+
+      // 3. P0032: Reserved movement type blocked (Feature 004 Layer 2 guard blocking direct 'sale'/'return' movements)
+      expect(mapSalesError({ code: "P0032" })).toEqual({
+        code: "RESERVED_MOVEMENT_TYPE_BLOCKED",
+        message: "Direct client submission of sale or return movements is prohibited.",
+        status: 422,
+      });
+
+      // 4. P0045: Payment incomplete (Feature 005 payment sum < sale total)
+      expect(mapSalesError({ code: "P0045" })).toEqual({
+        code: "PAYMENT_INCOMPLETE",
+        message: "Total payments do not cover the sale amount.",
+        status: 422,
+      });
+
+      // 5. P0046: Payment exceeds payable amount (Feature 005 non-cash tender overpayment)
+      expect(mapSalesError({ code: "P0046" })).toEqual({
+        code: "PAYMENT_EXCEEDS_PAYABLE_AMOUNT",
+        message: "Non-cash payment exceeds payable amount.",
+        status: 422,
+      });
+
+      // 6. P0056: Product inactive return blocked (Feature 005 return restock blocked on inactive product)
+      expect(mapSalesError({ code: "P0056" })).toEqual({
+        code: "PRODUCT_INACTIVE_RETURN_BLOCKED",
+        message: "Cannot restock inventory for inactive product.",
+        status: 422,
+      });
+
+      // 7. P0057: Payment reference required (Feature 005 non-cash tender requires reference)
+      expect(mapSalesError({ code: "P0057" })).toEqual({
+        code: "PAYMENT_REFERENCE_REQUIRED",
+        message: "Transaction reference required for non-cash payment.",
+        status: 422,
+      });
+
+      // Explicit non-collision assertions against previous report misattributions:
+      // P0032 is RESERVED_MOVEMENT_TYPE_BLOCKED, NOT idempotency conflict
+      expect(KNOWN_SALES_ERRORS.P0032?.code).not.toBe("IDEMPOTENCY_CONFLICT");
+      expect(KNOWN_SALES_ERRORS.P0032?.code).toBe("RESERVED_MOVEMENT_TYPE_BLOCKED");
+
+      // P0020 is INVALID_MOVEMENT_TYPE, NOT insufficient stock (P0011 is INSUFFICIENT_STOCK)
+      expect(KNOWN_SALES_ERRORS.P0020?.code).not.toBe("INSUFFICIENT_STOCK");
+      expect(KNOWN_SALES_ERRORS.P0011?.code).toBe("INSUFFICIENT_STOCK");
+
+      // P0056 is PRODUCT_INACTIVE_RETURN_BLOCKED, NOT invalid tender (P0045/P0046 are tender errors)
+      expect(KNOWN_SALES_ERRORS.P0056?.code).not.toBe("PAYMENT_INCOMPLETE");
+      expect(KNOWN_SALES_ERRORS.P0056?.code).not.toBe("PAYMENT_EXCEEDS_PAYABLE_AMOUNT");
+      expect(KNOWN_SALES_ERRORS.P0056?.code).toBe("PRODUCT_INACTIVE_RETURN_BLOCKED");
+    });
+  });
+
   describe("Direct SQLSTATE Code Mapping", () => {
     it("maps all documented Feature 005 customer domain errors (P0040–P0042)", () => {
       expect(mapSalesError({ code: "P0040" })).toEqual({
@@ -297,6 +364,17 @@ describe("T037: Sales & Financial Error Code Mapper", () => {
       });
 
       // Specialized 23505 for payment reference
+      expect(
+        mapSalesError({
+          code: "23505",
+          message: 'duplicate key value violates unique constraint "uq_payments_org_ref"',
+        })
+      ).toEqual({
+        code: "PAYMENT_REFERENCE_EXISTS",
+        message: "A payment with this reference number already exists in your organization.",
+        status: 409,
+      });
+
       expect(
         mapSalesError({
           code: "23505",
