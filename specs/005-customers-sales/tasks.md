@@ -113,21 +113,21 @@
 
 ### Implementation for User Story 1
 
-- [ ] T048 [US1] Implement `executeSaleAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:create`, RPC: `execute_sale`, idempotency key forwarding)
-- [ ] T049 [US1] Implement client-side canonical hash utility in `src/lib/sales/canonical-hash.ts` per `contracts/server-actions.md` §2 (deterministic sorting of items by product_id, payments by 5 fields, numeric formatting, reference_no normalization)
+- [x] T048 [US1] Implement `executeSaleAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:create`, RPC: `execute_sale`, idempotency key forwarding)
+- [x] T049 [US1] Implement client-side canonical hash utility in `src/lib/sales/canonical-hash.ts` per `contracts/server-actions.md` §2 (deterministic sorting of items by product_id, payments by 5 fields, numeric formatting, reference_no normalization)
 
 ### User Story 3 — Multi-Method & Split Payments (Priority: P1) 🎯 MVP
 
 > **Note**: US3 is integrated directly into US1 checkout since payments are an atomic part of the checkout transaction. The `execute_sale` RPC and POS UI handle multi-tender, cash change calculation, and reference validation natively.
 
-- [ ] T050 [US1] Build POS cart page with product search (name, SKU) in `src/app/[slug]/pos/page.tsx`
-- [ ] T051 [US1] Build cart item row component with quantity editing and line discount input in `src/components/pos/cart-item-row.tsx`
-- [ ] T052 [US1] Build order-level discount input and checkout summary component (subtotal, discounts, tax preview, total) in `src/components/pos/checkout-summary.tsx`
-- [ ] T053 [US1] Integrate customer picker from Phase 3 into POS page (optional customer attachment, inline creation per CUS-009/CUS-010)
-- [ ] T054 [US1] Build payment modal with multi-tender support (cash change calculation, card/bank/other reference entry, running balance display) in `src/components/pos/payment-modal.tsx`
-- [ ] T055 [US1] Implement idempotency key generation (client UUID) and checkout submit handler with canonical hash in `src/components/pos/checkout-handler.tsx`
-- [ ] T056 [US1] Build receipt display component (shown after successful checkout) in `src/components/pos/checkout-receipt.tsx`
-- [ ] T057 [US1] Build error display with actionable domain error messages (insufficient stock, payment mismatch, archived product) in `src/components/pos/checkout-errors.tsx`
+- [x] T050 [US1] Build POS cart page with product search (name, SKU) in `src/app/[slug]/pos/page.tsx`
+- [x] T051 [US1] Build cart item row component with quantity editing and line discount input in `src/components/pos/cart-item-row.tsx`
+- [x] T052 [US1] Build order-level discount input and checkout summary component (subtotal, discounts, tax preview, total) in `src/components/pos/checkout-summary.tsx`
+- [x] T053 [US1] Integrate customer picker from Phase 3 into POS page (optional customer attachment, inline creation per CUS-009/CUS-010)
+- [x] T054 [US1] Build payment modal with multi-tender support (cash change calculation, card/bank/other reference entry, running balance display) in `src/components/pos/payment-modal.tsx`
+- [x] T055 [US1] Implement idempotency key generation (client UUID) and checkout submit handler with canonical hash in `src/components/pos/checkout-handler.tsx`
+- [x] T056 [US1] Build receipt display component (shown after successful checkout) in `src/components/pos/checkout-receipt.tsx`
+- [x] T057 [US1] Build error display with actionable domain error messages (insufficient stock, payment mismatch, archived product) in `src/components/pos/checkout-errors.tsx`
 
 **Checkpoint**: POS checkout is fully functional end-to-end. Walk-in and registered customer sales with single or split payments complete atomically. Independently testable.
 

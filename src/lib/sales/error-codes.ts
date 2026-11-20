@@ -325,7 +325,11 @@ export function mapSalesError(error: unknown): MappedSalesError {
           status: 409,
         };
       }
-      if (rawMessage.includes("PAYMENT_REFERENCE_EXISTS")) {
+      if (
+        rawMessage.includes("uq_payments_org_method_ref") ||
+        rawMessage.includes("uq_payments_org_ref") ||
+        rawMessage.includes("PAYMENT_REFERENCE_EXISTS")
+      ) {
         return {
           code: "PAYMENT_REFERENCE_EXISTS",
           message: "A payment with this reference number already exists in your organization.",
