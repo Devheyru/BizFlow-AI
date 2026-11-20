@@ -18,9 +18,10 @@ export interface CustomerRecord {
 }
 
 export interface CustomerDetail extends CustomerRecord {
-  purchaseCount: number;
+  purchaseCount: number | null;
   lastPurchaseAt: string | null;
-  totalSpent: number;
+  totalSpent: number | null;
+  salesMetricsRestricted?: boolean;
 }
 
 export interface PaginatedCustomerResult {
