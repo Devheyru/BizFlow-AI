@@ -294,6 +294,49 @@ export type IssueReplacementRefundInput = z.infer<typeof issueReplacementRefundS
 // ============================================================================
 // 5. Sales List Query Schema (T036, US5)
 // ============================================================================
+export const CALENDAR_DATE_REGEX = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+export const ISO_DATETIME_REGEX =
+  /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,9})?)?(Z|[+-]([01]\d|2[0-3]):[0-5]\d)$/;
+
+/**
+ * Validates that a date query parameter is strictly either:
+ * 1. A valid calendar date string in YYYY-MM-DD format (verified for month/day validity).
+ * 2. A valid ISO 8601 datetime with explicit timezone offset (Z or +/-HH:MM).
+ * Rejects malformed dates (e.g., 2026-02-29, 2026-99-99), ambiguous formats (11/20/2026),
+ * incomplete years (2026), and untimezoned timestamps.
+ */
+export function isValidSalesDate(val: string): boolean {
+  if (typeof val !== "string") return false;
+  const trimmed = val.trim();
+
+  if (CALENDAR_DATE_REGEX.test(trimmed)) {
+    const parts = trimmed.split("-").map(Number);
+    const y = parts[0]!;
+    const m = parts[1]!;
+    const d = parts[2]!;
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return (
+      date.getUTCFullYear() === y &&
+      date.getUTCMonth() === m - 1 &&
+      date.getUTCDate() === d
+    );
+  }
+
+  if (ISO_DATETIME_REGEX.test(trimmed)) {
+    return !isNaN(Date.parse(trimmed));
+  }
+
+  return false;
+}
+
+export const flexibleDateSchema = z
+  .string()
+  .refine(isValidSalesDate, {
+    message: "Invalid date format. Expected YYYY-MM-DD calendar date or ISO 8601 datetime with timezone offset.",
+  })
+  .optional()
+  .nullable();
+
 export const salesListQuerySchema = z.object({
   search: z.string().trim().optional(),
   status: z
@@ -311,8 +354,8 @@ export const salesListQuerySchema = z.object({
     .uuid({ message: "Invalid cashier ID format" })
     .optional()
     .nullable(),
-  fromDate: z.string().datetime({ message: "Invalid fromDate ISO format" }).optional().nullable(),
-  toDate: z.string().datetime({ message: "Invalid toDate ISO format" }).optional().nullable(),
+  fromDate: flexibleDateSchema,
+  toDate: flexibleDateSchema,
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   sortBy: z.enum(["created_at", "sale_number", "total_amount"]).default("created_at"),

@@ -617,6 +617,12 @@ isOneToOne: false
 "get_next_sale_number":
 { Args: { "p_org_id": string }; Returns: string
                            },
+"get_sale_detail":
+{ Args: { "p_org_id": string, "p_sale_id": string }; Returns: Json
+                           },
+"update_tax_settings":
+{ Args: { "p_default_tax_rate": number, "p_is_tax_inclusive": boolean, "p_org_id": string, "p_tax_name": string }; Returns: Json
+                           },
 "update_customer":
 { Args: { "p_customer_id": string,"p_email"?: string | null,"p_name": string,"p_notes"?: string | null,"p_org_id": string,"p_phone"?: string | null }; Returns: Json
                            },
