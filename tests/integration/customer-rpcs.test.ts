@@ -345,11 +345,14 @@ describeIntegration("Feature 005 — Customer RPCs & RLS Integration Tests (T023
       expect(insertErr).not.toBeNull();
 
       // Direct DELETE attempt
-      const { error: deleteErr } = await managerClient
+      const { error: deleteErr, data: deleteData } = await managerClient
         .from("customers")
         .delete()
-        .eq("organization_id", orgAId);
-      expect(deleteErr).not.toBeNull();
+        .eq("organization_id", orgAId)
+        .select();
+      expect(deleteErr != null || (deleteData && deleteData.length === 0)).toBe(true);
+      const custCheck = await pgClient.query(`SELECT id FROM public.customers WHERE organization_id = $1;`, [orgAId]);
+      expect(custCheck.rows.length).toBeGreaterThan(0);
     });
   });
 });

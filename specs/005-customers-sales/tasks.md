@@ -141,14 +141,14 @@
 
 ### Implementation for User Story 5
 
-- [ ] T058 [US5] Implement `updateTaxSettingsAction` and `getTaxSettingsAction` server actions in `src/actions/tax-settings-actions.ts` per `contracts/server-actions.md` §3
-- [ ] T059 [US5] Build tax settings form and page in `src/components/settings/tax-settings-form.tsx` and `src/app/[slug]/settings/tax/page.tsx`
-- [ ] T060 [US5] Implement `getSalesListAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (PostgREST query with date, status, customer, cashier, search filters; database-enforced cost protection: direct SELECT on `unit_cost` revoked)
-- [ ] T061 [US5] Implement `getSaleDetailAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (RPC call: `supabase.rpc('get_sale_detail', { p_org_id, p_sale_id })`, database-enforced dual-permission cost masking)
-- [ ] T062 [US5] Implement `getReturnHistoryAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2
-- [ ] T063 [US5] Build sales history page with filters (date range, status, customer, cashier, sale number search) in `src/app/[slug]/sales/page.tsx`
-- [ ] T064 [US5] Build sale detail page with items, payments, returns, refunds tabs in `src/app/[slug]/sales/[saleId]/page.tsx`
-- [ ] T065 [US5] Build printable thermal receipt component (80mm/58mm layout: org header, currency, receipt number, date/time in org timezone, cashier, customer, line items, subtotal, discount, tax, total, tender, change, return policy) in `src/components/sales/receipt-print.tsx`
+- [x] T058 [US5] Implement `updateTaxSettingsAction` and `getTaxSettingsAction` server actions in `src/actions/tax-settings-actions.ts` per `contracts/server-actions.md` §3
+- [x] T059 [US5] Build tax settings form and page in `src/components/settings/tax-settings-form.tsx` and `src/app/[slug]/settings/tax/page.tsx`
+- [x] T060 [US5] Implement `getSalesListAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (PostgREST query with date, status, customer, cashier, search filters; database-enforced cost protection: direct SELECT on `unit_cost` revoked)
+- [x] T061 [US5] Implement `getSaleDetailAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (RPC call: `supabase.rpc('get_sale_detail', { p_org_id, p_sale_id })`, database-enforced dual-permission cost masking)
+- [x] T062 [US5] Implement `getReturnHistoryAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2
+- [x] T063 [US5] Build sales history page with filters (date range, status, customer, cashier, sale number search) in `src/app/[slug]/sales/page.tsx`
+- [x] T064 [US5] Build sale detail page with items, payments, returns, refunds tabs in `src/app/[slug]/sales/[saleId]/page.tsx`
+- [x] T065 [US5] Build printable thermal receipt component (80mm/58mm layout: org header, currency, receipt number, date/time in org timezone, cashier, customer, line items, subtotal, discount, tax, total, tender, change, return policy) in `src/components/sales/receipt-print.tsx`
 
 **Checkpoint**: Sales history browsable, detail view complete with cost masking enforced at DB level, thermal receipt printable. Independently testable.
 

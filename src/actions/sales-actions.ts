@@ -5,11 +5,33 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { resolveTenantContext } from "@/lib/auth/context";
 import { hasPermission } from "@/lib/auth/permissions";
-import { executeSaleSchema } from "@/lib/validations/sales";
+import {
+  executeSaleSchema,
+  salesListQuerySchema,
+} from "@/lib/validations/sales";
 import { mapSalesError } from "@/lib/sales/error-codes";
 import { formatCanonicalAmount, normalizeReferenceNo } from "@/lib/sales/canonical-hash";
 import type { ActionResult } from "@/types/auth";
-import type { SaleResult } from "@/types/sales";
+import type {
+  SaleResult,
+  SaleStatus,
+  PaymentStatus,
+  PaymentMethod,
+  RefundStatus,
+  PaginatedSalesList,
+  SaleListItem,
+  SaleDetail,
+  SaleDetailHeader,
+  SaleDetailCustomer,
+  SaleItemRecord,
+  PaymentRecord,
+  ReturnRecord,
+  RefundRecord,
+  ReturnHistory,
+  ReturnItemRecord,
+} from "@/types/sales";
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ExecuteSaleRpcResponse {
   success: boolean;
@@ -27,6 +49,84 @@ interface ExecuteSaleRpcResponse {
   created_at: string;
   created_by: string;
 }
+
+interface RawSaleDetailRpcResponse {
+  sale: {
+    id: string;
+    organization_id: string;
+    sale_number: string;
+    customer_id: string | null;
+    status: "completed" | "voided" | "partially_returned" | "returned";
+    payment_status: "paid" | "partially_refunded" | "refunded";
+    subtotal: string | number;
+    order_discount_amount: string | number;
+    taxable_amount: string | number;
+    tax_amount: string | number;
+    total_amount: string | number;
+    currency: string;
+    is_tax_inclusive: boolean;
+    tax_rate: string | number;
+    tax_name: string;
+    notes: string | null;
+    created_at: string;
+    created_by: string;
+  };
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    status: string;
+  } | null;
+  items: Array<{
+    id: string;
+    product_id: string;
+    product_name: string;
+    sku: string;
+    quantity: string | number;
+    unit_price: string | number;
+    unit_cost: string | number | null;
+    line_discount_amount: string | number;
+    allocated_order_disc: string | number;
+    taxable_amount: string | number;
+    allocated_tax_amount: string | number;
+    total_price: string | number;
+    movement_id: string | null;
+  }>;
+  payments: Array<{
+    id: string;
+    payment_method: "cash" | "card" | "bank_transfer" | "other";
+    amount: string | number;
+    amount_tendered: string | number | null;
+    change_due: string | number | null;
+    reference_no: string | null;
+    created_at: string;
+  }>;
+  returns: Array<{
+    id: string;
+    return_number: string;
+    reason: string;
+    total_refund_amount: string | number;
+    created_at: string;
+    created_by: string;
+  }>;
+  refunds: Array<{
+    id: string;
+    return_id: string | null;
+    parent_refund_id: string | null;
+    obligation_refund_id: string;
+    refund_method: "cash" | "card" | "bank_transfer" | "other";
+    amount: string | number;
+    reference_no: string | null;
+    status: "completed" | "pending" | "failed";
+    reason?: string | null;
+    created_at: string;
+  }>;
+}
+
+// ============================================================================
+// 1. Execute Sale Action (T048, US1, US3)
+// ============================================================================
 
 /**
  * Server action to execute an atomic multi-item POS checkout transaction via public.execute_sale RPC.
@@ -163,6 +263,664 @@ export async function executeSaleAction(
         code: "INTERNAL_ERROR",
         message,
       },
+    };
+  }
+}
+
+// ============================================================================
+// 2. Sales List Action (T060, US5)
+// ============================================================================
+
+/**
+ * Resolves the IANA timezone offset string (e.g. '+00:00', '-05:00') for a calendar date.
+ */
+function getTimezoneOffsetString(dateStr: string, timeZone?: string | null): string {
+  try {
+    const probe = new Date(`${dateStr}T12:00:00Z`);
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone || "UTC",
+      timeZoneName: "longOffset",
+    }).formatToParts(probe);
+    const tzPart = parts.find((p) => p.type === "timeZoneName")?.value;
+    if (!tzPart || tzPart === "GMT") return "+00:00";
+    return tzPart.replace("GMT", "");
+  } catch {
+    return "+00:00";
+  }
+}
+
+/**
+ * Normalizes a date query filter into an authoritative UTC ISO string:
+ * - Plain calendar dates (YYYY-MM-DD) expand to start-of-day (00:00:00.000) or end-of-day (23:59:59.999)
+ *   in the organization's configured IANA timezone (public.organizations.timezone).
+ * - Full ISO datetime strings are converted directly to UTC ISO strings.
+ */
+function parseDateQueryBoundary(
+  dateStr: string,
+  boundary: "start" | "end",
+  timeZone?: string | null
+): string {
+  const trimmed = dateStr.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const offset = getTimezoneOffsetString(trimmed, timeZone || "UTC");
+    const time = boundary === "start" ? "00:00:00.000" : "23:59:59.999";
+    return new Date(`${trimmed}T${time}${offset}`).toISOString();
+  }
+  return new Date(trimmed).toISOString();
+}
+
+/**
+ * Server action to retrieve a paginated, filterable list of sales (T060, US5).
+ * - Requires `sales:read` permission.
+ * - Supports filters: date range (fromDate, toDate), status, customer, cashier, search query.
+ * - Enforces cost confidentiality: direct SELECT on `sale_items.unit_cost` is never queried.
+ * - Deterministic ordering by sortBy and id prevents pagination drift.
+ */
+export async function getSalesListAction(
+  slug: string,
+  rawQuery: unknown
+): Promise<ActionResult<PaginatedSalesList>> {
+  try {
+    // 1. Authoritative Server-Side Tenant Resolution
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    // 2. Application Permission Guard (sales:read)
+    if (!hasPermission(context, "sales:read")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Insufficient permissions to view sales history.",
+        },
+      };
+    }
+
+    // 3. Validate Query Parameters via Zod
+    const parsed = salesListQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) {
+      const flattened = parsed.error.flatten();
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message:
+            flattened.formErrors[0] ||
+            Object.values(flattened.fieldErrors)[0]?.[0] ||
+            "Invalid sales query parameters.",
+          details: flattened.fieldErrors,
+        },
+      };
+    }
+    const query = parsed.data;
+
+    // 4. Construct PostgREST Query
+    const supabase = await createClient();
+    let dbQuery = supabase
+      .from("sales")
+      .select(
+        `
+          id,
+          sale_number,
+          status,
+          payment_status,
+          customer_id,
+          subtotal,
+          order_discount_amount,
+          tax_amount,
+          total_amount,
+          currency,
+          created_by,
+          created_at,
+          customers ( id, name )
+        `,
+        { count: "exact" }
+      )
+      .eq("organization_id", context.organization.id);
+
+    // Apply Filters
+    if (query.search && query.search.trim().length > 0) {
+      dbQuery = dbQuery.ilike("sale_number", `%${query.search.trim()}%`);
+    }
+
+    if (query.status && query.status !== "all") {
+      dbQuery = dbQuery.eq("status", query.status);
+    }
+
+    if (query.customerId) {
+      dbQuery = dbQuery.eq("customer_id", query.customerId);
+    }
+
+    if (query.cashierId) {
+      dbQuery = dbQuery.eq("created_by", query.cashierId);
+    }
+
+    const orgTimezone = context.organization.timezone || "UTC";
+
+    if (query.fromDate) {
+      const fromDateIso = parseDateQueryBoundary(query.fromDate, "start", orgTimezone);
+      dbQuery = dbQuery.gte("created_at", fromDateIso);
+    }
+
+    if (query.toDate) {
+      const toDateIso = parseDateQueryBoundary(query.toDate, "end", orgTimezone);
+      dbQuery = dbQuery.lte("created_at", toDateIso);
+    }
+
+    // Deterministic Sorting
+    const sortAscending = query.sortOrder === "asc";
+    dbQuery = dbQuery
+      .order(query.sortBy, { ascending: sortAscending })
+      .order("id", { ascending: true });
+
+    // Pagination via .range()
+    const from = (query.page - 1) * query.pageSize;
+    const to = from + query.pageSize - 1;
+    dbQuery = dbQuery.range(from, to);
+
+    const { data: salesRows, count, error } = await dbQuery;
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSalesError(error),
+      };
+    }
+
+    const totalCount = count ?? 0;
+    const totalPages = Math.ceil(totalCount / query.pageSize) || 1;
+
+    // 5. Gather item counts and cashier profiles safely without N+1 or cost leakage
+    const saleIds = (salesRows || []).map((s) => s.id);
+    const itemCountsMap: Record<string, number> = {};
+    const cashierMap: Record<string, string> = {};
+
+    if (saleIds.length > 0) {
+      // Direct SELECT on safe columns (id, sale_id) of sale_items (unit_cost omitted)
+      const { data: itemRows } = await supabase
+        .from("sale_items")
+        .select("id, sale_id")
+        .eq("organization_id", context.organization.id)
+        .in("sale_id", saleIds);
+
+      if (itemRows) {
+        for (const item of itemRows) {
+          itemCountsMap[item.sale_id] = (itemCountsMap[item.sale_id] || 0) + 1;
+        }
+      }
+
+      // Resolve cashier display names from profiles
+      const cashierIds = Array.from(
+        new Set((salesRows || []).map((s) => s.created_by).filter(Boolean))
+      );
+      if (cashierIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, first_name, last_name")
+          .in("id", cashierIds);
+
+        if (profiles) {
+          for (const p of profiles) {
+            cashierMap[p.id] = `${p.first_name} ${p.last_name}`.trim();
+          }
+        }
+      }
+    }
+
+    // 6. Map to Domain SaleListItem
+    const items: SaleListItem[] = (salesRows || []).map((s) => {
+      const cust = s.customers as unknown as { id: string; name: string } | null;
+      return {
+        id: s.id,
+        saleNumber: s.sale_number,
+        status: s.status as SaleStatus,
+        paymentStatus: s.payment_status as PaymentStatus,
+        customerId: s.customer_id,
+        customerName: cust?.name ?? null,
+        itemsCount: itemCountsMap[s.id] ?? 0,
+        subtotal: parseFloat(String(s.subtotal)),
+        orderDiscountAmount: parseFloat(String(s.order_discount_amount)),
+        taxAmount: parseFloat(String(s.tax_amount)),
+        totalAmount: parseFloat(String(s.total_amount)),
+        currency: s.currency,
+        cashierId: s.created_by,
+        cashierName: cashierMap[s.created_by] ?? null,
+        createdAt: s.created_at,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        items,
+        totalCount,
+        page: query.page,
+        pageSize: query.pageSize,
+        totalPages,
+      },
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
+    };
+  }
+}
+
+// ============================================================================
+// 3. Sale Detail Action (T061, US5)
+// ============================================================================
+
+/**
+ * Server action to retrieve complete sale detail breakdown via public.get_sale_detail RPC (T061, US5).
+ * - Requires `sales:read` permission.
+ * - Database-enforced cost masking: unit_cost is NULL unless caller holds BOTH
+ *   `inventory:read_valuation` AND `products:read_cost`.
+ * - Retrieves line items, payment tenders, return records, and refund allocations.
+ */
+export async function getSaleDetailAction(
+  slug: string,
+  saleId: string
+): Promise<ActionResult<SaleDetail>> {
+  try {
+    // 1. Authoritative Server-Side Tenant Resolution
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    // 2. Application Permission Guard
+    if (!hasPermission(context, "sales:read")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Insufficient permissions to view sale details.",
+        },
+      };
+    }
+
+    // 3. Validate Sale Identifier
+    if (!saleId || !UUID_REGEX.test(saleId)) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid sale ID format.",
+        },
+      };
+    }
+
+    // 4. Call Authoritative Database RPC
+    const supabase = await createClient();
+    const { data: rawRpcData, error } = await supabase.rpc("get_sale_detail", {
+      p_org_id: context.organization.id,
+      p_sale_id: saleId,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSalesError(error),
+      };
+    }
+
+    const payload = rawRpcData as unknown as RawSaleDetailRpcResponse | null;
+    if (!payload || !payload.sale) {
+      return {
+        success: false,
+        error: {
+          code: "SALE_NOT_FOUND",
+          message: "Sale not found.",
+        },
+      };
+    }
+
+    // 5. Transform to strongly-typed domain SaleDetail
+    const saleHeader: SaleDetailHeader = {
+      id: payload.sale.id,
+      organizationId: payload.sale.organization_id,
+      saleNumber: payload.sale.sale_number,
+      customerId: payload.sale.customer_id,
+      status: payload.sale.status,
+      paymentStatus: payload.sale.payment_status,
+      subtotal: parseFloat(String(payload.sale.subtotal)),
+      orderDiscountAmount: parseFloat(String(payload.sale.order_discount_amount)),
+      taxableAmount: parseFloat(String(payload.sale.taxable_amount)),
+      taxAmount: parseFloat(String(payload.sale.tax_amount)),
+      totalAmount: parseFloat(String(payload.sale.total_amount)),
+      currency: payload.sale.currency,
+      isTaxInclusive: Boolean(payload.sale.is_tax_inclusive),
+      taxRate: parseFloat(String(payload.sale.tax_rate)),
+      taxName: payload.sale.tax_name,
+      notes: payload.sale.notes,
+      createdAt: payload.sale.created_at,
+      createdBy: payload.sale.created_by,
+    };
+
+    const customer: SaleDetailCustomer | null = payload.customer
+      ? {
+          id: payload.customer.id,
+          name: payload.customer.name,
+          phone: payload.customer.phone,
+          email: payload.customer.email,
+        }
+      : null;
+
+    const items: SaleItemRecord[] = (payload.items || []).map((it) => ({
+      id: it.id,
+      productId: it.product_id,
+      productName: it.product_name,
+      sku: it.sku,
+      quantity: parseFloat(String(it.quantity)),
+      unitPrice: parseFloat(String(it.unit_price)),
+      unitCost: it.unit_cost != null ? parseFloat(String(it.unit_cost)) : null,
+      lineDiscountAmount: parseFloat(String(it.line_discount_amount)),
+      allocatedOrderDisc: parseFloat(String(it.allocated_order_disc)),
+      taxableAmount: parseFloat(String(it.taxable_amount)),
+      allocatedTaxAmount: parseFloat(String(it.allocated_tax_amount)),
+      totalPrice: parseFloat(String(it.total_price)),
+      movementId: it.movement_id,
+    }));
+
+    const payments: PaymentRecord[] = (payload.payments || []).map((pm) => ({
+      id: pm.id,
+      paymentMethod: pm.payment_method,
+      amount: parseFloat(String(pm.amount)),
+      amountTendered:
+        pm.amount_tendered != null ? parseFloat(String(pm.amount_tendered)) : null,
+      changeDue: pm.change_due != null ? parseFloat(String(pm.change_due)) : null,
+      referenceNo: pm.reference_no,
+      createdAt: pm.created_at,
+    }));
+
+    const returns: ReturnRecord[] = (payload.returns || []).map((rt) => ({
+      id: rt.id,
+      returnNumber: rt.return_number,
+      saleId: payload.sale.id,
+      refundMethod: "cash", // Header stores default; items have detail
+      reason: rt.reason,
+      totalRefundAmount: parseFloat(String(rt.total_refund_amount)),
+      createdAt: rt.created_at,
+      createdBy: rt.created_by,
+    }));
+
+    const refunds: RefundRecord[] = (payload.refunds || []).map((rf) => ({
+      id: rf.id,
+      obligationRefundId: rf.obligation_refund_id,
+      replacesRefundId: rf.parent_refund_id,
+      paymentId: null,
+      saleReturnId: rf.return_id,
+      refundMethod: rf.refund_method,
+      amount: parseFloat(String(rf.amount)),
+      status: rf.status,
+      referenceNo: rf.reference_no,
+      externalReference: null,
+      failureReason: rf.reason ?? null,
+      createdAt: rf.created_at,
+      updatedAt: rf.created_at,
+    }));
+
+    return {
+      success: true,
+      data: {
+        sale: saleHeader,
+        customer,
+        items,
+        payments,
+        returns,
+        refunds,
+      },
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
+    };
+  }
+}
+
+// ============================================================================
+// 4. Return History Action (T062, US5)
+// ============================================================================
+
+/**
+ * Server action to retrieve return and refund lifecycle records for a sale (T062, US5).
+ * - Requires `returns:read` permission.
+ * - Scoped strictly to the active organization.
+ * - Resolves partial returns, restock status, and pending/completed/failed refunds.
+ */
+export async function getReturnHistoryAction(
+  slug: string,
+  saleId: string
+): Promise<ActionResult<ReturnHistory[]>> {
+  try {
+    // 1. Authoritative Server-Side Tenant Resolution
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+    const { context } = tenantRes;
+
+    // 2. Application Permission Guard
+    if (!hasPermission(context, "returns:read")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Insufficient permissions to view return history.",
+        },
+      };
+    }
+
+    // 3. Validate Sale Identifier
+    if (!saleId || !UUID_REGEX.test(saleId)) {
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid sale ID format.",
+        },
+      };
+    }
+
+    // 4. Query Sale Returns for this Sale
+    const supabase = await createClient();
+    const { data: returnRows, error: returnErr } = await supabase
+      .from("sale_returns")
+      .select(
+        `
+          id,
+          return_number,
+          sale_id,
+          reason,
+          total_refund_amount,
+          created_at,
+          created_by
+        `
+      )
+      .eq("organization_id", context.organization.id)
+      .eq("sale_id", saleId)
+      .order("created_at", { ascending: true });
+
+    if (returnErr) {
+      return {
+        success: false,
+        error: mapSalesError(returnErr),
+      };
+    }
+
+    if (!returnRows || returnRows.length === 0) {
+      return {
+        success: true,
+        data: [],
+      };
+    }
+
+    const returnIds = returnRows.map((r) => r.id);
+    const itemsByReturnId: Record<string, ReturnItemRecord[]> = {};
+    const refundsByReturnId: Record<string, RefundRecord[]> = {};
+
+    // 5. Query Return Items
+    const { data: itemRows, error: itemsErr } = await supabase
+      .from("sale_return_items")
+      .select(
+        `
+          id,
+          sale_item_id,
+          product_id,
+          quantity,
+          refund_amount,
+          restock_to_inventory,
+          movement_id,
+          return_id
+        `
+      )
+      .eq("organization_id", context.organization.id)
+      .in("return_id", returnIds);
+
+    if (itemsErr) {
+      return {
+        success: false,
+        error: mapSalesError(itemsErr),
+      };
+    }
+
+    const productMap: Record<string, { name: string; sku: string }> = {};
+    if (itemRows && itemRows.length > 0) {
+      const productIds = Array.from(new Set(itemRows.map((i) => i.product_id).filter(Boolean)));
+      if (productIds.length > 0) {
+        const { data: prodRows } = await supabase
+          .from("products")
+          .select("id, name, sku")
+          .eq("organization_id", context.organization.id)
+          .in("id", productIds);
+
+        if (prodRows) {
+          for (const p of prodRows) {
+            productMap[p.id] = { name: p.name, sku: p.sku };
+          }
+        }
+      }
+
+      for (const item of itemRows) {
+        const prod = productMap[item.product_id];
+        const list = itemsByReturnId[item.return_id] || [];
+        list.push({
+          id: item.id,
+          saleItemId: item.sale_item_id,
+          productId: item.product_id,
+          productName: prod?.name,
+          sku: prod?.sku,
+          quantity: parseFloat(String(item.quantity)),
+          refundAmount: parseFloat(String(item.refund_amount)),
+          restockToInventory: Boolean(item.restock_to_inventory),
+          movementId: item.movement_id,
+        });
+        itemsByReturnId[item.return_id] = list;
+      }
+    }
+
+    // 6. Query Associated Refunds
+    const { data: refundRows, error: refundErr } = await supabase
+      .from("refunds")
+      .select(
+        `
+          id,
+          obligation_refund_id,
+          parent_refund_id,
+          return_id,
+          refund_method,
+          amount,
+          status,
+          reference_no,
+          reason,
+          created_at,
+          updated_at
+        `
+      )
+      .eq("organization_id", context.organization.id)
+      .in("return_id", returnIds);
+
+    if (refundErr) {
+      return {
+        success: false,
+        error: mapSalesError(refundErr),
+      };
+    }
+
+    if (refundRows) {
+      for (const rf of refundRows) {
+        if (rf.return_id) {
+          const list = refundsByReturnId[rf.return_id] || [];
+          list.push({
+            id: rf.id,
+            obligationRefundId: rf.obligation_refund_id,
+            replacesRefundId: rf.parent_refund_id,
+            paymentId: null,
+            saleReturnId: rf.return_id,
+            refundMethod: rf.refund_method as PaymentMethod,
+            amount: parseFloat(String(rf.amount)),
+            status: rf.status as RefundStatus,
+            referenceNo: rf.reference_no,
+            externalReference: null,
+            failureReason: rf.reason ?? null,
+            createdAt: rf.created_at,
+            updatedAt: rf.updated_at,
+          });
+          refundsByReturnId[rf.return_id] = list;
+        }
+      }
+    }
+
+    // 7. Assemble Structured ReturnHistory[]
+    const returnHistoryList: ReturnHistory[] = returnRows.map((r) => {
+      const returnRefunds = refundsByReturnId[r.id] || [];
+      const primaryRefundMethod = (returnRefunds[0]?.refundMethod ?? "cash") as PaymentMethod;
+      return {
+        id: r.id,
+        returnNumber: r.return_number,
+        saleId: r.sale_id,
+        refundMethod: primaryRefundMethod,
+        reason: r.reason,
+        totalRefundAmount: parseFloat(String(r.total_refund_amount)),
+        createdAt: r.created_at,
+        createdBy: r.created_by,
+        items: itemsByReturnId[r.id] || [],
+        refunds: returnRefunds,
+      };
+    });
+
+    return {
+      success: true,
+      data: returnHistoryList,
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
     };
   }
 }
