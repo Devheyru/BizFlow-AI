@@ -47,6 +47,9 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
   // 5. Void Permission Evaluation (T068, US6)
   const canVoid = hasPermission(context, "sales:void");
 
+  // 6. Return Permission Evaluation (T071, US4)
+  const canReturn = hasPermission(context, "returns:create");
+
   return (
     <SaleDetailView
       slug={slug}
@@ -54,6 +57,7 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
       returnHistory={returnHistory}
       canViewCost={canViewCost}
       canVoid={canVoid}
+      canReturn={canReturn}
       organizationName={context.organization.name}
     />
   );

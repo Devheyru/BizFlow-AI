@@ -174,3 +174,162 @@ export function calculatePosTotals(params: {
     lineItems,
   };
 }
+
+// ============================================================================
+// Return & Refund Proportional Calculation Utilities (T070, US4)
+// ============================================================================
+
+/**
+ * Decimal-safe rounding function matching PostgreSQL `round(numeric, integer)`.
+ * Implements symmetric round-half-away-from-zero matching PostgreSQL `numeric` arithmetic.
+ * Avoids IEEE 754 precision drift (e.g. 1.005 * 100 = 100.49999999999999) and ensures
+ * exact parity for both positive and negative halfway boundaries.
+ */
+export function roundToCurrency(value: number, decimals: number): number {
+  if (isNaN(value) || !isFinite(value)) return 0;
+  if (value === 0) return 0;
+  const sign = value < 0 ? -1 : 1;
+  const abs = Math.abs(value);
+  const rounded = Number(Math.round(Number(abs + "e" + decimals)) + "e-" + decimals);
+  return sign * rounded;
+}
+
+export interface ReturnRefundLineInput {
+  saleItemId: string;
+  /** Sale item total_price snapshot (includes unit price, discounts, and tax) */
+  totalPrice: number;
+  /** Original sold quantity on the sale item */
+  soldQuantity: number;
+  /** Remaining unreturned quantity for this sale item */
+  remainingReturnableQty: number;
+  /** Cumulative amount already refunded for this sale item in previous returns */
+  previouslyRefundedAmount: number;
+  /** Quantity requested for this return */
+  returnQuantity: number;
+}
+
+export interface ReturnRefundPreviewLineResult {
+  saleItemId: string;
+  returnQuantity: number;
+  quantity: number;
+  refundAmount: number;
+  isResidual: boolean;
+}
+
+export interface ReturnRefundPreviewParams {
+  items: ReturnRefundLineInput[];
+  saleTotalAmount: number;
+  previouslyRefundedTotal: number;
+  refundMethod: string;
+  originalMethodTenderAmount?: number;
+  previouslyRefundedMethodAmount?: number;
+  currency?: string;
+}
+
+export interface ReturnRefundPreviewResult {
+  totalRefund: number;
+  total: number;
+  lineBreakdowns: ReturnRefundPreviewLineResult[];
+  remainingCumulativePayable: number;
+  isCumulativeCapped: boolean;
+  remainingMethodTender: number;
+  isSplitTenderCapped: boolean;
+  isValid: boolean;
+}
+
+/**
+ * Computes estimated proportional return refund replicating PostgreSQL `public.execute_sale_return`:
+ * - Uses authoritative ISO 4217 currency exponent for rounding precision.
+ * - Employs exact decimal arithmetic matching PostgreSQL numeric round.
+ * - When returning the final remaining quantity of an item, absorbs residual difference:
+ *     refundAmount = totalPrice - previouslyRefundedAmount
+ * - Proportional allocation for partial returns:
+ *     refundAmount = round((totalPrice / soldQuantity) * returnQuantity, decimals)
+ * - Enforces cumulative refund ceiling against remaining sale total.
+ * - Enforces split-tender ceiling against remaining method tender (for non-cash methods).
+ */
+export function calculateReturnRefundPreview(
+  params: ReturnRefundPreviewParams
+): ReturnRefundPreviewResult {
+  const {
+    items,
+    saleTotalAmount,
+    previouslyRefundedTotal,
+    refundMethod,
+    originalMethodTenderAmount = 0,
+    previouslyRefundedMethodAmount = 0,
+    currency = "USD",
+  } = params;
+
+  const decimals = getCurrencyExponent(currency);
+
+  let totalRefund = 0;
+  const lineBreakdowns: ReturnRefundPreviewLineResult[] = [];
+
+  for (const item of items) {
+    if (item.returnQuantity <= 0) continue;
+
+    let lineRefund = 0;
+    let isResidual = false;
+
+    // Final remaining quantity absorbs residual rounding discrepancy
+    if (item.returnQuantity >= item.remainingReturnableQty && item.soldQuantity > 0) {
+      lineRefund = Math.max(
+        0,
+        roundToCurrency(item.totalPrice - item.previouslyRefundedAmount, decimals)
+      );
+      isResidual = true;
+    } else if (item.soldQuantity > 0) {
+      lineRefund = roundToCurrency(
+        (item.totalPrice / item.soldQuantity) * item.returnQuantity,
+        decimals
+      );
+    }
+
+    totalRefund = roundToCurrency(totalRefund + lineRefund, decimals);
+    lineBreakdowns.push({
+      saleItemId: item.saleItemId,
+      returnQuantity: item.returnQuantity,
+      quantity: item.returnQuantity,
+      refundAmount: lineRefund,
+      isResidual,
+    });
+  }
+
+  // Cumulative refund cap check: total prior + new refund cannot exceed sale total amount
+  const remainingCumulativePayable = Math.max(
+    0,
+    roundToCurrency(saleTotalAmount - previouslyRefundedTotal, decimals)
+  );
+  const isCumulativeCapped = totalRefund > remainingCumulativePayable;
+
+  // Split-tender cap check: for non-cash methods, refund cannot exceed original tender minus prior refunds
+  let remainingMethodTender = Infinity;
+  let isSplitTenderCapped = false;
+
+  if (refundMethod !== "cash") {
+    remainingMethodTender = Math.max(
+      0,
+      roundToCurrency(originalMethodTenderAmount - previouslyRefundedMethodAmount, decimals)
+    );
+    isSplitTenderCapped = totalRefund > remainingMethodTender;
+  }
+
+  const isValid =
+    items.length > 0 &&
+    lineBreakdowns.some((l) => l.returnQuantity > 0) &&
+    totalRefund > 0 &&
+    !isCumulativeCapped &&
+    !isSplitTenderCapped;
+
+  return {
+    totalRefund,
+    total: totalRefund,
+    lineBreakdowns,
+    remainingCumulativePayable,
+    isCumulativeCapped,
+    remainingMethodTender,
+    isSplitTenderCapped,
+    isValid,
+  };
+}

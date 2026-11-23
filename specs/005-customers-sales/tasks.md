@@ -178,9 +178,9 @@
 
 ### Implementation for User Story 4
 
-- [ ] T069 [US4] Implement `executeSaleReturnAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `returns:create`, RPC: `execute_sale_return`, idempotency key)
-- [ ] T070 [US4] Build return dialog with line-item selection checkboxes, quantity inputs, restock toggle per item, refund method selection, and proportional refund calculation preview in `src/components/sales/return-dialog.tsx`
-- [ ] T071 [US4] Integrate return button into sale detail page (Phase 5 T064) with permission visibility check (`returns:create`) and void-state blocking
+- [x] T069 [US4] Implement `executeSaleReturnAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `returns:create`, RPC: `execute_sale_return`, idempotency key)
+- [x] T070 [US4] Build return dialog with line-item selection checkboxes, quantity inputs, restock toggle per item, refund method selection, and proportional refund calculation preview in `src/components/sales/return-dialog.tsx`
+- [x] T071 [US4] Integrate return button into sale detail page (Phase 5 T064) with permission visibility check (`returns:create`) and void-state blocking
 
 **Checkpoint**: Returns work for partial quantities with/without restock. Excess quantity and duplicate items rejected. Inactive product restock blocked. Independently testable.
 
