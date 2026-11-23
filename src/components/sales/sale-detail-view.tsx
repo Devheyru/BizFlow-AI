@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Printer,
@@ -11,6 +12,7 @@ import {
   Receipt,
   FileText,
   DollarSign,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +24,7 @@ import {
 } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/inventory/formatters";
 import { ReceiptPrint } from "@/components/sales/receipt-print";
+import { VoidDialog } from "@/components/sales/void-dialog";
 import type {
   SaleDetail,
   ReturnHistory,
@@ -35,6 +38,7 @@ export interface SaleDetailViewProps {
   saleDetail: SaleDetail;
   returnHistory: ReturnHistory[];
   canViewCost: boolean;
+  canVoid?: boolean;
   organizationName: string;
 }
 
@@ -43,10 +47,13 @@ export function SaleDetailView({
   saleDetail,
   returnHistory,
   canViewCost,
+  canVoid = false,
   organizationName,
 }: SaleDetailViewProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"items" | "payments" | "returns">("items");
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
 
   const { sale, customer, items, payments, refunds } = saleDetail;
   const currency = sale.currency || "USD";
@@ -59,6 +66,11 @@ export function SaleDetailView({
     minute: "2-digit",
     second: "2-digit",
   });
+
+  const canShowVoid =
+    Boolean(canVoid) &&
+    sale.status === "completed" &&
+    returnHistory.length === 0;
 
   // Status badge styling
   const renderStatusBadge = (saleStatus: SaleStatus) => {
@@ -175,6 +187,16 @@ export function SaleDetailView({
         </div>
 
         <div className="flex items-center gap-2">
+          {canShowVoid && (
+            <Button
+              variant="destructive"
+              onClick={() => setIsVoidModalOpen(true)}
+              className="gap-2"
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Void Sale
+            </Button>
+          )}
           <Button
             onClick={() => setIsPrintModalOpen(true)}
             className="gap-2"
@@ -184,6 +206,16 @@ export function SaleDetailView({
           </Button>
         </div>
       </div>
+
+      {/* Sale Voided Notice Banner */}
+      {sale.status === "voided" && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
+          <div>
+            <span className="font-semibold">This sale was voided.</span> All line item quantities have been restored to inventory.
+          </div>
+        </div>
+      )}
 
       {/* Meta Cards: Customer, Tax, and Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -431,6 +463,57 @@ export function SaleDetailView({
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Void Refunds (if any exist without a returnId) */}
+              {refunds.filter((rf) => !rf.saleReturnId).length > 0 && (
+                <Card className="border-red-200 dark:border-red-900/50">
+                  <CardHeader className="py-3 px-4 bg-red-50/50 dark:bg-red-950/20 border-b border-red-200 dark:border-red-900/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        <CardTitle className="text-sm font-semibold">
+                          Void Reversal Reimbursements
+                        </CardTitle>
+                      </div>
+                      <span className="text-xs font-semibold text-red-700 dark:text-red-300">
+                        {sale.status === "voided" ? "Sale Voided" : "Reversal Refunds"}
+                      </span>
+                    </div>
+                    <CardDescription className="text-xs">
+                      Automatic reversal refunds generated upon voiding this sale.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-2">
+                    <div className="space-y-1.5 text-xs">
+                      {refunds
+                        .filter((rf) => !rf.saleReturnId)
+                        .map((rf) => (
+                          <div
+                            key={rf.id}
+                            className="flex items-center justify-between p-2 rounded-md bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium capitalize">
+                                {rf.refundMethod.replace("_", " ")}
+                              </span>
+                              {rf.referenceNo && (
+                                <span className="text-gray-500 font-mono text-[11px]">
+                                  (Ref: {rf.referenceNo})
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {renderRefundStatusBadge(rf.status)}
+                              <span className="font-semibold">
+                                {formatCurrency(rf.amount, currency)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Returns List */}
               {returnHistory.map((ret) => (
                 <Card key={ret.id}>
@@ -543,6 +626,23 @@ export function SaleDetailView({
           payments={payments}
           organizationName={organizationName}
           onClose={() => setIsPrintModalOpen(false)}
+        />
+      )}
+
+      {/* Sale Void Dialog Modal (T067, T068, US6) */}
+      {isVoidModalOpen && (
+        <VoidDialog
+          isOpen={isVoidModalOpen}
+          onClose={() => setIsVoidModalOpen(false)}
+          slug={slug}
+          saleId={sale.id}
+          saleNumber={sale.saleNumber}
+          totalAmount={sale.totalAmount}
+          currency={currency}
+          payments={payments}
+          onSuccess={() => {
+            router.refresh();
+          }}
         />
       )}
     </>

@@ -44,12 +44,16 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
     hasPermission(context, "inventory:read_valuation") &&
     hasPermission(context, "products:read_cost");
 
+  // 5. Void Permission Evaluation (T068, US6)
+  const canVoid = hasPermission(context, "sales:void");
+
   return (
     <SaleDetailView
       slug={slug}
       saleDetail={saleRes.data}
       returnHistory={returnHistory}
       canViewCost={canViewCost}
+      canVoid={canVoid}
       organizationName={context.organization.name}
     />
   );

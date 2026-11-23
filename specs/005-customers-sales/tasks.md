@@ -162,9 +162,9 @@
 
 ### Implementation for User Story 6
 
-- [ ] T066 [US6] Implement `voidSaleAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:void`, RPC: `void_sale`, idempotency key)
-- [ ] T067 [US6] Build void confirmation dialog with reason input, optional reversal reference entry, and permission gating in `src/components/sales/void-dialog.tsx`
-- [ ] T068 [US6] Integrate void button into sale detail page (Phase 5 T064) with permission visibility check (`sales:void`)
+- [x] T066 [US6] Implement `voidSaleAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:void`, RPC: `void_sale`, idempotency key)
+- [x] T067 [US6] Build void confirmation dialog with reason input, optional reversal reference entry, and permission gating in `src/components/sales/void-dialog.tsx`
+- [x] T068 [US6] Integrate void button into sale detail page (Phase 5 T064) with permission visibility check (`sales:void`)
 
 **Checkpoint**: Voids work for cash (immediate) and external (pending) payments. Cashiers blocked. Returns blocked after void. Independently testable.
 
