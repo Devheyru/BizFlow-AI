@@ -156,9 +156,11 @@ export interface VoidResult {
   saleId: string;
   saleNumber: string;
   status: SaleStatus;
-  refundsCount: number;
-  refundIds: string[];
+  paymentStatus: PaymentStatus;
+  refundsCount?: number;
+  refundIds?: string[];
   voidedAt: string;
+  voidedBy?: string;
 }
 
 export interface ReturnResult {

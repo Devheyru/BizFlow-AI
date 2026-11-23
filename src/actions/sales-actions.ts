@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import {
   executeSaleSchema,
   salesListQuerySchema,
+  voidSaleSchema,
 } from "@/lib/validations/sales";
 import { mapSalesError } from "@/lib/sales/error-codes";
 import { formatCanonicalAmount, normalizeReferenceNo } from "@/lib/sales/canonical-hash";
@@ -29,6 +30,7 @@ import type {
   RefundRecord,
   ReturnHistory,
   ReturnItemRecord,
+  VoidResult,
 } from "@/types/sales";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -515,7 +517,6 @@ export async function getSalesListAction(
     };
   }
 }
-
 // ============================================================================
 // 3. Sale Detail Action (T061, US5)
 // ============================================================================
@@ -695,7 +696,6 @@ export async function getSaleDetailAction(
     };
   }
 }
-
 // ============================================================================
 // 4. Return History Action (T062, US5)
 // ============================================================================
@@ -916,6 +916,119 @@ export async function getReturnHistoryAction(
     return {
       success: true,
       data: returnHistoryList,
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
+    };
+  }
+}
+/**
+ * Voids an existing completed sale, restores inventory atomically,
+ * and creates reversal refund records via public.void_sale RPC.
+ *
+ * Permission required: 'sales:void' (Owner, Admin, Manager)
+ * Authoritative Source: specs/005-customers-sales/contracts/server-actions.md §2, database-rpcs.md §2
+ */
+export async function voidSaleAction(
+  slug: string,
+  input: unknown
+): Promise<ActionResult<VoidResult>> {
+  try {
+    // 1. Resolve Tenant Context
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+
+    const { context } = tenantRes;
+
+    // 2. Permission Check: sales:void (Owner, Admin, Manager)
+    if (!hasPermission(context, "sales:void")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to void sales.",
+        },
+      };
+    }
+
+    // 3. Validate Input with voidSaleSchema
+    const parseResult = voidSaleSchema.safeParse(input);
+    if (!parseResult.success) {
+      const firstErr = parseResult.error.errors[0];
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: firstErr?.message || "Invalid void parameters.",
+        },
+      };
+    }
+
+    const { saleId, voidReason, idempotencyKey, reversalReferences } = parseResult.data;
+
+    // 4. Transform reversal references to database parameter format if present
+    const formattedReversals =
+      reversalReferences && reversalReferences.length > 0
+        ? reversalReferences.map((r) => ({
+            payment_id: r.paymentId,
+            reference_no: r.referenceNo.trim(),
+          }))
+        : null;
+
+    // 5. Invoke SECURITY DEFINER RPC public.void_sale
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("void_sale", {
+      p_org_id: context.organization.id,
+      p_sale_id: saleId,
+      p_void_reason: voidReason.trim(),
+      p_idempotency_key: idempotencyKey,
+      p_reversal_references: formattedReversals,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSalesError(error),
+      };
+    }
+
+    const raw = data as {
+      success: boolean;
+      is_replay: boolean;
+      sale_id: string;
+      sale_number: string;
+      status: SaleStatus;
+      payment_status: PaymentStatus;
+      voided_at: string;
+      voided_by?: string;
+    };
+
+    // 6. Revalidate relevant paths
+    revalidatePath(`/${slug}/sales`);
+    revalidatePath(`/${slug}/sales/${saleId}`);
+
+    return {
+      success: true,
+      data: {
+        success: true,
+        isReplay: Boolean(raw.is_replay),
+        saleId: raw.sale_id,
+        saleNumber: raw.sale_number,
+        status: raw.status,
+        paymentStatus: raw.payment_status,
+        voidedAt: raw.voided_at,
+        voidedBy: raw.voided_by,
+      },
     };
   } catch (err: unknown) {
     return {

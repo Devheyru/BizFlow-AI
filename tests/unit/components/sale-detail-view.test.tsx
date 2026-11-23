@@ -1,10 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { SaleDetailView } from "@/components/sales/sale-detail-view";
 import type { SaleDetail, ReturnHistory } from "@/types/sales";
 
-describe("SaleDetailView Component (T064, US5)", () => {
+const mockRefresh = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    refresh: mockRefresh,
+  }),
+}));
+
+describe("SaleDetailView Component (T064, T068, US5, US6)", () => {
   const mockSaleDetail: SaleDetail = {
     sale: {
       id: "sale-101",
@@ -206,5 +214,99 @@ describe("SaleDetailView Component (T064, US5)", () => {
     fireEvent.click(printBtn);
 
     expect(screen.getByText(/Receipt Preview/i)).toBeDefined();
+  });
+
+  // T068 Integration Tests: Void Sale button & permissions
+  it("renders 'Void Sale' button when canVoid is true for completed sale without returns", () => {
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={mockSaleDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const voidBtn = screen.queryByRole("button", { name: /Void Sale/i });
+    expect(voidBtn).not.toBeNull();
+  });
+
+  it("hides 'Void Sale' button when canVoid is false (e.g. Cashier role)", () => {
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={mockSaleDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={false}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const voidBtn = screen.queryByRole("button", { name: /Void Sale/i });
+    expect(voidBtn).toBeNull();
+  });
+
+  it("hides 'Void Sale' button when sale is already voided", () => {
+    const voidedDetail: SaleDetail = {
+      ...mockSaleDetail,
+      sale: {
+        ...mockSaleDetail.sale,
+        status: "voided",
+        paymentStatus: "refunded",
+      },
+    };
+
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={voidedDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /Void Sale/i })).toBeNull();
+    // Verify void banner is displayed
+    expect(screen.getByText(/This sale was voided/i)).toBeDefined();
+  });
+
+  it("hides 'Void Sale' button when returns exist against the sale", () => {
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={mockSaleDetail}
+        returnHistory={mockReturnHistory}
+        canViewCost={false}
+        canVoid={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /Void Sale/i })).toBeNull();
+  });
+
+  it("opens VoidDialog when 'Void Sale' button is clicked", () => {
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={mockSaleDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const voidBtn = screen.getByRole("button", { name: /Void Sale/i });
+    fireEvent.click(voidBtn);
+
+    // Verify dialog opens
+    expect(screen.getByText(/Void Sale SAL-20261121-0001/i)).toBeDefined();
+    expect(screen.getByLabelText(/Reason for Void/i)).toBeDefined();
   });
 });

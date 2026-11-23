@@ -627,7 +627,7 @@ isOneToOne: false
 { Args: { "p_customer_id": string,"p_email"?: string | null,"p_name": string,"p_notes"?: string | null,"p_org_id": string,"p_phone"?: string | null }; Returns: Json
                            },
 "void_sale":
-{ Args: { "p_idempotency_key": string,"p_org_id": string,"p_reason": string,"p_sale_id": string }; Returns: Json
+{ Args: { "p_idempotency_key": string,"p_org_id": string,"p_reversal_references"?: Json | null,"p_sale_id": string,"p_void_reason": string }; Returns: Json
                            },
             "_execute_inventory_mutation_core":
 { Args: { "p_created_by": string,"p_expected_version"?: number,"p_idempotency_key": string,"p_idempotency_payload_hash": string,"p_movement_type": string,"p_org_id": string,"p_product_id": string,"p_quantity_delta": number,"p_reason": string,"p_reference_id": string }; Returns: Json
