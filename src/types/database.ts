@@ -603,7 +603,7 @@ isOneToOne: false
 { Args: { "p_customer_id"?: string | null,"p_idempotency_key": string,"p_items": Json,"p_notes"?: string | null,"p_order_discount_amount"?: number,"p_org_id": string,"p_payments": Json }; Returns: Json
                            },
 "execute_sale_return":
-{ Args: { "p_idempotency_key": string,"p_items": Json,"p_org_id": string,"p_original_sale_id": string,"p_reason": string,"p_refunds": Json }; Returns: Json
+{ Args: { "p_idempotency_key": string,"p_org_id": string,"p_reason": string,"p_reference_no"?: string | null,"p_refund_method": string,"p_return_items": Json,"p_sale_id": string }; Returns: Json
                            },
 "get_cashier_summary":
 { Args: { "p_cashier_id"?: string,"p_end_time"?: string,"p_org_id": string,"p_start_time"?: string }; Returns: Json

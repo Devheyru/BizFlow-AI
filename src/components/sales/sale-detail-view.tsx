@@ -25,6 +25,7 @@ import {
 import { formatCurrency } from "@/lib/inventory/formatters";
 import { ReceiptPrint } from "@/components/sales/receipt-print";
 import { VoidDialog } from "@/components/sales/void-dialog";
+import { ReturnDialog } from "@/components/sales/return-dialog";
 import type {
   SaleDetail,
   ReturnHistory,
@@ -39,6 +40,7 @@ export interface SaleDetailViewProps {
   returnHistory: ReturnHistory[];
   canViewCost: boolean;
   canVoid?: boolean;
+  canReturn?: boolean;
   organizationName: string;
 }
 
@@ -48,12 +50,14 @@ export function SaleDetailView({
   returnHistory,
   canViewCost,
   canVoid = false,
+  canReturn = false,
   organizationName,
 }: SaleDetailViewProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"items" | "payments" | "returns">("items");
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
 
   const { sale, customer, items, payments, refunds } = saleDetail;
   const currency = sale.currency || "USD";
@@ -71,6 +75,10 @@ export function SaleDetailView({
     Boolean(canVoid) &&
     sale.status === "completed" &&
     returnHistory.length === 0;
+
+  const canShowReturn =
+    Boolean(canReturn) &&
+    (sale.status === "completed" || sale.status === "partially_returned");
 
   // Status badge styling
   const renderStatusBadge = (saleStatus: SaleStatus) => {
@@ -187,6 +195,16 @@ export function SaleDetailView({
         </div>
 
         <div className="flex items-center gap-2">
+          {canShowReturn && (
+            <Button
+              variant="outline"
+              onClick={() => setIsReturnModalOpen(true)}
+              className="gap-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:text-purple-800 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-950/40"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Process Return
+            </Button>
+          )}
           {canShowVoid && (
             <Button
               variant="destructive"
@@ -640,6 +658,20 @@ export function SaleDetailView({
           totalAmount={sale.totalAmount}
           currency={currency}
           payments={payments}
+          onSuccess={() => {
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Sale Return Dialog Modal (T070, T071, US4) */}
+      {isReturnModalOpen && (
+        <ReturnDialog
+          isOpen={isReturnModalOpen}
+          onClose={() => setIsReturnModalOpen(false)}
+          slug={slug}
+          saleDetail={saleDetail}
+          returnHistory={returnHistory}
           onSuccess={() => {
             router.refresh();
           }}

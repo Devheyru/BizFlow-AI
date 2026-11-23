@@ -48,6 +48,7 @@ export interface SaleItemRecord {
   productId: string;
   productName: string;
   sku: string;
+  unitOfMeasure?: string;
   quantity: number;
   unitPrice: number;
   /**

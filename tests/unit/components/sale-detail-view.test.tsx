@@ -309,4 +309,137 @@ describe("SaleDetailView Component (T064, T068, US5, US6)", () => {
     expect(screen.getByText(/Void Sale SAL-20261121-0001/i)).toBeDefined();
     expect(screen.getByLabelText(/Reason for Void/i)).toBeDefined();
   });
+
+  // T071 Integration Tests: Process Return button & permissions
+  it("renders 'Process Return' button when canReturn is true for completed sale", () => {
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={mockSaleDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={false}
+        canReturn={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const returnBtn = screen.queryByRole("button", { name: /Process Return/i });
+    expect(returnBtn).not.toBeNull();
+  });
+
+  it("renders 'Process Return' button for partially_returned sale when canReturn is true", () => {
+    const partiallyReturnedDetail: SaleDetail = {
+      ...mockSaleDetail,
+      sale: {
+        ...mockSaleDetail.sale,
+        status: "partially_returned",
+      },
+    };
+
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={partiallyReturnedDetail}
+        returnHistory={mockReturnHistory}
+        canViewCost={false}
+        canVoid={false}
+        canReturn={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const returnBtn = screen.queryByRole("button", { name: /Process Return/i });
+    expect(returnBtn).not.toBeNull();
+  });
+
+  it("hides 'Process Return' button when canReturn is false", () => {
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={mockSaleDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={false}
+        canReturn={false}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const returnBtn = screen.queryByRole("button", { name: /Process Return/i });
+    expect(returnBtn).toBeNull();
+  });
+
+  it("hides 'Process Return' button when sale is voided", () => {
+    const voidedDetail: SaleDetail = {
+      ...mockSaleDetail,
+      sale: {
+        ...mockSaleDetail.sale,
+        status: "voided",
+        paymentStatus: "refunded",
+      },
+    };
+
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={voidedDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={false}
+        canReturn={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const returnBtn = screen.queryByRole("button", { name: /Process Return/i });
+    expect(returnBtn).toBeNull();
+  });
+
+  it("hides 'Process Return' button when sale is returned", () => {
+    const returnedDetail: SaleDetail = {
+      ...mockSaleDetail,
+      sale: {
+        ...mockSaleDetail.sale,
+        status: "returned",
+        paymentStatus: "refunded",
+      },
+    };
+
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={returnedDetail}
+        returnHistory={mockReturnHistory}
+        canViewCost={false}
+        canVoid={false}
+        canReturn={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const returnBtn = screen.queryByRole("button", { name: /Process Return/i });
+    expect(returnBtn).toBeNull();
+  });
+
+  it("opens ReturnDialog when 'Process Return' button is clicked", () => {
+    render(
+      <SaleDetailView
+        slug="alpha-store"
+        saleDetail={mockSaleDetail}
+        returnHistory={[]}
+        canViewCost={false}
+        canVoid={false}
+        canReturn={true}
+        organizationName="Alpha Store"
+      />
+    );
+
+    const returnBtn = screen.getByRole("button", { name: /Process Return/i });
+    fireEvent.click(returnBtn);
+
+    // Verify Return Dialog header opens
+    expect(screen.getByText(/Process Return for SAL-20261121-0001/i)).toBeDefined();
+    expect(screen.getByLabelText(/Reason for Return/i)).toBeDefined();
+  });
 });

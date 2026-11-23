@@ -9,6 +9,7 @@ import {
   executeSaleSchema,
   salesListQuerySchema,
   voidSaleSchema,
+  executeSaleReturnSchema,
 } from "@/lib/validations/sales";
 import { mapSalesError } from "@/lib/sales/error-codes";
 import { formatCanonicalAmount, normalizeReferenceNo } from "@/lib/sales/canonical-hash";
@@ -31,6 +32,7 @@ import type {
   ReturnHistory,
   ReturnItemRecord,
   VoidResult,
+  ReturnResult,
 } from "@/types/sales";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1028,6 +1030,133 @@ export async function voidSaleAction(
         paymentStatus: raw.payment_status,
         voidedAt: raw.voided_at,
         voidedBy: raw.voided_by,
+      },
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
+    };
+  }
+}
+
+/**
+ * Processes a line-item customer return against an existing completed sale,
+ * optionally restores restocked quantities to inventory via Feature 004 core,
+ * and records refunds via public.execute_sale_return RPC.
+ *
+ * Permission required: 'returns:create' (Owner, Admin, Manager)
+ * Authoritative Source: specs/005-customers-sales/contracts/server-actions.md §2, database-rpcs.md §3
+ */
+export async function executeSaleReturnAction(
+  slug: string,
+  input: unknown
+): Promise<ActionResult<ReturnResult>> {
+  try {
+    // 1. Resolve Tenant Context
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+
+    const { context } = tenantRes;
+
+    // 2. Permission Check: returns:create (Owner, Admin, Manager)
+    if (!hasPermission(context, "returns:create")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to process returns.",
+        },
+      };
+    }
+
+    // 3. Validate Input with executeSaleReturnSchema
+    const parseResult = executeSaleReturnSchema.safeParse(input);
+    if (!parseResult.success) {
+      const firstErr = parseResult.error.errors[0];
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: firstErr?.message || "Invalid return parameters.",
+        },
+      };
+    }
+
+    const {
+      saleId,
+      returnItems,
+      refundMethod,
+      reason,
+      idempotencyKey,
+      referenceNo,
+    } = parseResult.data;
+
+    // 4. Transform return items to RPC JSON parameter format
+    const formattedReturnItems = returnItems.map((item) => ({
+      sale_item_id: item.saleItemId,
+      quantity: item.quantity,
+      restock_to_inventory: item.restockToInventory,
+    }));
+
+    // 5. Invoke SECURITY DEFINER RPC public.execute_sale_return
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("execute_sale_return", {
+      p_org_id: context.organization.id,
+      p_sale_id: saleId,
+      p_return_items: formattedReturnItems,
+      p_refund_method: refundMethod,
+      p_reason: reason.trim(),
+      p_idempotency_key: idempotencyKey,
+      p_reference_no: referenceNo && referenceNo.trim().length > 0 ? referenceNo.trim() : null,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSalesError(error),
+      };
+    }
+
+    const raw = data as {
+      success: boolean;
+      is_replay: boolean;
+      return_id: string;
+      return_number: string;
+      sale_id: string;
+      total_refund_amount: string | number;
+      refund_id: string;
+      refund_status: RefundStatus;
+      sale_status: SaleStatus;
+      payment_status: PaymentStatus;
+    };
+
+    // 6. Revalidate relevant paths
+    revalidatePath(`/${slug}/sales`);
+    revalidatePath(`/${slug}/sales/${saleId}`);
+    revalidatePath(`/${slug}/inventory`);
+
+    return {
+      success: true,
+      data: {
+        success: true,
+        isReplay: Boolean(raw.is_replay),
+        returnId: raw.return_id,
+        returnNumber: raw.return_number,
+        saleId: raw.sale_id,
+        refundId: raw.refund_id,
+        refundStatus: raw.refund_status,
+        totalRefundAmount: parseFloat(String(raw.total_refund_amount)),
+        saleStatus: raw.sale_status,
+        paymentStatus: raw.payment_status,
       },
     };
   } catch (err: unknown) {
