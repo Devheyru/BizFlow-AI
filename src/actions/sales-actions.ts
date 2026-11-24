@@ -10,6 +10,9 @@ import {
   salesListQuerySchema,
   voidSaleSchema,
   executeSaleReturnSchema,
+  confirmRefundSchema,
+  recordRefundFailureSchema,
+  issueReplacementRefundSchema,
 } from "@/lib/validations/sales";
 import { mapSalesError } from "@/lib/sales/error-codes";
 import { formatCanonicalAmount, normalizeReferenceNo } from "@/lib/sales/canonical-hash";
@@ -33,6 +36,9 @@ import type {
   ReturnItemRecord,
   VoidResult,
   ReturnResult,
+  RefundConfirmation,
+  RefundFailureResult,
+  ReplacementRefundResult,
 } from "@/types/sales";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -519,6 +525,7 @@ export async function getSalesListAction(
     };
   }
 }
+
 // ============================================================================
 // 3. Sale Detail Action (T061, US5)
 // ============================================================================
@@ -698,6 +705,7 @@ export async function getSaleDetailAction(
     };
   }
 }
+
 // ============================================================================
 // 4. Return History Action (T062, US5)
 // ============================================================================
@@ -926,6 +934,7 @@ export async function getReturnHistoryAction(
     };
   }
 }
+
 /**
  * Voids an existing completed sale, restores inventory atomically,
  * and creates reversal refund records via public.void_sale RPC.
@@ -1039,7 +1048,6 @@ export async function voidSaleAction(
     };
   }
 }
-
 /**
  * Processes a line-item customer return against an existing completed sale,
  * optionally restores restocked quantities to inventory via Feature 004 core,
@@ -1157,6 +1165,323 @@ export async function executeSaleReturnAction(
         totalRefundAmount: parseFloat(String(raw.total_refund_amount)),
         saleStatus: raw.sale_status,
         paymentStatus: raw.payment_status,
+      },
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
+    };
+  }
+}
+/**
+ * Confirms a pending refund reimbursement with an external provider reference (T072, US7).
+ *
+ * Permission required: 'refunds:read' AND ('sales:void' OR 'returns:create')
+ * Authoritative Source: specs/005-customers-sales/contracts/server-actions.md §2
+ */
+export async function confirmRefundAction(
+  slug: string,
+  input: unknown
+): Promise<ActionResult<RefundConfirmation>> {
+  try {
+    // 1. Resolve Tenant Context
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+
+    const { context } = tenantRes;
+
+    // 2. Permission Check: refunds:read AND (sales:void OR returns:create)
+    const hasRefundsRead = hasPermission(context, "refunds:read");
+    const hasVoidOrReturn =
+      hasPermission(context, "sales:void") || hasPermission(context, "returns:create");
+
+    if (!hasRefundsRead || !hasVoidOrReturn) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to confirm refund reimbursements.",
+        },
+      };
+    }
+
+    // 3. Validate Input with confirmRefundSchema
+    const parseResult = confirmRefundSchema.safeParse(input);
+    if (!parseResult.success) {
+      const firstErr = parseResult.error.errors[0];
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: firstErr?.message || "Invalid refund confirmation parameters.",
+        },
+      };
+    }
+
+    const { refundId, externalReference, idempotencyKey } = parseResult.data;
+
+    // 4. Invoke SECURITY DEFINER RPC public.confirm_refund_reimbursement
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("confirm_refund_reimbursement", {
+      p_org_id: context.organization.id,
+      p_refund_id: refundId,
+      p_external_reference: externalReference.trim(),
+      p_idempotency_key: idempotencyKey,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSalesError(error),
+      };
+    }
+
+    const raw = data as {
+      success: boolean;
+      is_replay: boolean;
+      refund_id: string;
+      sale_id?: string;
+      status: RefundStatus;
+      external_reference?: string;
+      reference_no?: string;
+      amount: string | number;
+      confirmed_at: string;
+    };
+
+    // 5. Revalidate relevant paths
+    revalidatePath(`/${slug}/sales`);
+    if (raw.sale_id) {
+      revalidatePath(`/${slug}/sales/${raw.sale_id}`);
+    }
+
+    return {
+      success: true,
+      data: {
+        success: true,
+        isReplay: Boolean(raw.is_replay),
+        refundId: raw.refund_id,
+        status: raw.status,
+        externalReference: raw.external_reference || raw.reference_no || externalReference.trim(),
+        confirmedAt: raw.confirmed_at,
+      },
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
+    };
+  }
+}
+/**
+ * Records a failure on a pending refund reimbursement (T073, US7).
+ *
+ * Permission required: 'sales:void' OR 'returns:create'
+ * Authoritative Source: specs/005-customers-sales/contracts/server-actions.md §2
+ */
+export async function recordRefundFailureAction(
+  slug: string,
+  input: unknown
+): Promise<ActionResult<RefundFailureResult>> {
+  try {
+    // 1. Resolve Tenant Context
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+
+    const { context } = tenantRes;
+
+    // 2. Permission Check: sales:void OR returns:create
+    if (!hasPermission(context, "sales:void") && !hasPermission(context, "returns:create")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to record refund failures.",
+        },
+      };
+    }
+
+    // 3. Validate Input with recordRefundFailureSchema
+    const parseResult = recordRefundFailureSchema.safeParse(input);
+    if (!parseResult.success) {
+      const firstErr = parseResult.error.errors[0];
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: firstErr?.message || "Invalid refund failure parameters.",
+        },
+      };
+    }
+
+    const { refundId, failureReason } = parseResult.data;
+
+    // 4. Invoke SECURITY DEFINER RPC public.record_refund_failure
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("record_refund_failure", {
+      p_org_id: context.organization.id,
+      p_refund_id: refundId,
+      p_failure_reason: failureReason.trim(),
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSalesError(error),
+      };
+    }
+
+    const raw = data as {
+      success: boolean;
+      refund_id: string;
+      sale_id?: string;
+      status: RefundStatus;
+      failure_reason: string;
+      failed_at: string;
+    };
+
+    // 5. Revalidate relevant paths
+    revalidatePath(`/${slug}/sales`);
+    if (raw.sale_id) {
+      revalidatePath(`/${slug}/sales/${raw.sale_id}`);
+    }
+
+    return {
+      success: true,
+      data: {
+        success: true,
+        refundId: raw.refund_id,
+        status: raw.status,
+        failureReason: raw.failure_reason,
+        failedAt: raw.failed_at,
+      },
+    };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: mapSalesError(err),
+    };
+  }
+}
+/**
+ * Issues a replacement refund for a failed refund attempt (T074, US7).
+ *
+ * Permission required: 'sales:void' OR 'returns:create'
+ * Authoritative Source: specs/005-customers-sales/contracts/server-actions.md §2
+ */
+export async function issueReplacementRefundAction(
+  slug: string,
+  input: unknown
+): Promise<ActionResult<ReplacementRefundResult>> {
+  try {
+    // 1. Resolve Tenant Context
+    const tenantRes = await resolveTenantContext(slug);
+    if (!tenantRes.ok) {
+      return {
+        success: false,
+        error: {
+          code: tenantRes.error.toUpperCase(),
+          message: "Organization not found or access denied.",
+        },
+      };
+    }
+
+    const { context } = tenantRes;
+
+    // 2. Permission Check: sales:void OR returns:create
+    if (!hasPermission(context, "sales:void") && !hasPermission(context, "returns:create")) {
+      return {
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "You do not have permission to issue replacement refunds.",
+        },
+      };
+    }
+
+    // 3. Validate Input with issueReplacementRefundSchema
+    const parseResult = issueReplacementRefundSchema.safeParse(input);
+    if (!parseResult.success) {
+      const firstErr = parseResult.error.errors[0];
+      return {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: firstErr?.message || "Invalid replacement refund parameters.",
+        },
+      };
+    }
+
+    const { failedRefundId, refundMethod, idempotencyKey, referenceNo, notes } =
+      parseResult.data;
+
+    // 4. Invoke SECURITY DEFINER RPC public.issue_replacement_refund
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("issue_replacement_refund", {
+      p_org_id: context.organization.id,
+      p_failed_refund_id: failedRefundId,
+      p_refund_method: refundMethod,
+      p_idempotency_key: idempotencyKey,
+      p_reference_no: referenceNo && referenceNo.trim().length > 0 ? referenceNo.trim() : null,
+      p_notes: notes && notes.trim().length > 0 ? notes.trim() : null,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: mapSalesError(error),
+      };
+    }
+
+    const raw = data as {
+      success: boolean;
+      is_replay: boolean;
+      replacement_refund_id?: string;
+      refund_id: string;
+      sale_id?: string;
+      obligation_refund_id: string;
+      failed_refund_id?: string;
+      parent_refund_id?: string;
+      status: RefundStatus;
+      refund_method: PaymentMethod;
+      amount: string | number;
+      created_at: string;
+    };
+
+    // 5. Revalidate relevant paths
+    revalidatePath(`/${slug}/sales`);
+    if (raw.sale_id) {
+      revalidatePath(`/${slug}/sales/${raw.sale_id}`);
+    }
+
+    return {
+      success: true,
+      data: {
+        success: true,
+        isReplay: Boolean(raw.is_replay),
+        replacementRefundId: raw.replacement_refund_id || raw.refund_id,
+        obligationRefundId: raw.obligation_refund_id,
+        failedRefundId: raw.failed_refund_id || raw.parent_refund_id || failedRefundId,
+        status: raw.status,
+        refundMethod: raw.refund_method,
+        amount: parseFloat(String(raw.amount)),
+        createdAt: raw.created_at,
       },
     };
   } catch (err: unknown) {

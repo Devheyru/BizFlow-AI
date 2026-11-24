@@ -13,6 +13,7 @@ import {
   FileText,
   DollarSign,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,7 @@ import { formatCurrency } from "@/lib/inventory/formatters";
 import { ReceiptPrint } from "@/components/sales/receipt-print";
 import { VoidDialog } from "@/components/sales/void-dialog";
 import { ReturnDialog } from "@/components/sales/return-dialog";
+import { RefundActions } from "@/components/sales/refund-actions";
 import type {
   SaleDetail,
   ReturnHistory,
@@ -41,6 +43,9 @@ export interface SaleDetailViewProps {
   canViewCost: boolean;
   canVoid?: boolean;
   canReturn?: boolean;
+  canConfirmRefund?: boolean;
+  canFailRefund?: boolean;
+  canReplaceRefund?: boolean;
   organizationName: string;
 }
 
@@ -51,6 +56,9 @@ export function SaleDetailView({
   canViewCost,
   canVoid = false,
   canReturn = false,
+  canConfirmRefund = false,
+  canFailRefund = false,
+  canReplaceRefund = false,
   organizationName,
 }: SaleDetailViewProps) {
   const router = useRouter();
@@ -481,6 +489,40 @@ export function SaleDetailView({
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Refund Reimbursement Lifecycle Actions (T075, T076, US7) */}
+              {refunds.length > 0 && (
+                <Card>
+                  <CardHeader className="py-3 px-4 bg-gray-50/50 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-800">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <CardTitle className="text-sm font-semibold">
+                          Reimbursement Lifecycle Management
+                        </CardTitle>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+                        {refunds.filter((r) => r.status === "pending").length} pending confirmation
+                      </span>
+                    </div>
+                    <CardDescription className="text-xs">
+                      Confirm external provider reversals, record gateway disbursement failures, and issue replacement refunds.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <RefundActions
+                      slug={slug}
+                      saleId={sale.id}
+                      refunds={refunds}
+                      payments={payments}
+                      currency={currency}
+                      canConfirm={canConfirmRefund}
+                      canFail={canFailRefund}
+                      canReplace={canReplaceRefund}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Void Refunds (if any exist without a returnId) */}
               {refunds.filter((rf) => !rf.saleReturnId).length > 0 && (
                 <Card className="border-red-200 dark:border-red-900/50">

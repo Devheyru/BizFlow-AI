@@ -50,6 +50,15 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
   // 6. Return Permission Evaluation (T071, US4)
   const canReturn = hasPermission(context, "returns:create");
 
+  // 7. Refund Lifecycle Permission Evaluation (T076, US7)
+  const canConfirmRefund =
+    hasPermission(context, "refunds:read") &&
+    (hasPermission(context, "sales:void") || hasPermission(context, "returns:create"));
+  const canFailRefund =
+    hasPermission(context, "sales:void") || hasPermission(context, "returns:create");
+  const canReplaceRefund =
+    hasPermission(context, "sales:void") || hasPermission(context, "returns:create");
+
   return (
     <SaleDetailView
       slug={slug}
@@ -58,6 +67,9 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
       canViewCost={canViewCost}
       canVoid={canVoid}
       canReturn={canReturn}
+      canConfirmRefund={canConfirmRefund}
+      canFailRefund={canFailRefund}
+      canReplaceRefund={canReplaceRefund}
       organizationName={context.organization.name}
     />
   );
