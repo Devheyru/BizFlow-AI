@@ -194,11 +194,11 @@
 
 ### Implementation for User Story 7
 
-- [ ] T072 [US7] Implement `confirmRefundAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `refunds:read` AND (`sales:void` OR `returns:create`), RPC: `confirm_refund_reimbursement`, idempotency key)
-- [ ] T073 [US7] Implement `recordRefundFailureAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:void` OR `returns:create`, RPC: `record_refund_failure`)
-- [ ] T074 [US7] Implement `issueReplacementRefundAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:void` OR `returns:create`, RPC: `issue_replacement_refund`, idempotency key)
-- [ ] T075 [US7] Build refund lifecycle management UI in `src/components/sales/refund-actions.tsx` (pending refund list → confirm dialog with external reference → failure dialog with reason → replacement dialog with method selection)
-- [ ] T076 [US7] Integrate refund lifecycle actions into sale detail page (Phase 5 T064) refunds tab
+- [x] T072 [US7] Implement `confirmRefundAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `refunds:read` AND (`sales:void` OR `returns:create`), RPC: `confirm_refund_reimbursement`, idempotency key)
+- [x] T073 [US7] Implement `recordRefundFailureAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:void` OR `returns:create`, RPC: `record_refund_failure`)
+- [x] T074 [US7] Implement `issueReplacementRefundAction` server action in `src/actions/sales-actions.ts` per `contracts/server-actions.md` §2 (permission: `sales:void` OR `returns:create`, RPC: `issue_replacement_refund`, idempotency key)
+- [x] T075 [US7] Build refund lifecycle management UI in `src/components/sales/refund-actions.tsx` (pending refund list → confirm dialog with external reference → failure dialog with reason → replacement dialog with method selection)
+- [x] T076 [US7] Integrate refund lifecycle actions into sale detail page (Phase 5 T064) refunds tab
 
 **Checkpoint**: Full refund lifecycle (confirm/fail/replace) operational. Obligation tracking, advisory locks, and idempotency safeguards enforced. Independently testable.
 
