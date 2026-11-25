@@ -210,47 +210,47 @@
 
 ### Unit Tests
 
-- [ ] T077 [P] Write unit tests for all customer Zod schemas (name boundaries, E.164 phone, email format, search query) in `tests/unit/validations/customers.test.ts`
-- [ ] T078 [P] Write unit tests for all sales Zod schemas (cart items, payment methods, quantities, discounts, amounts, UOM precision) in `tests/unit/validations/sales.test.ts`
-- [ ] T079 [P] Write unit tests for tax calculation (exclusive, inclusive, zero-rate, rounding, JPY exponent 0, KWD exponent 3) in `tests/unit/sales/tax-calculation.test.ts`
-- [ ] T080 [P] Write unit tests for discount allocation (line, order, proportional, zero-subtotal guard) in `tests/unit/sales/discount-allocation.test.ts`
-- [ ] T081 [P] Write unit tests for canonical hash construction (payment normalization, reference_no null/empty/whitespace, array sort determinism, amount_tendered/change_due sensitivity) in `tests/unit/sales/canonical-hash.test.ts`
-- [ ] T082 [P] Write unit tests for refund calculation (proportional, residual absorption on final return, cumulative cap) in `tests/unit/sales/refund-calculation.test.ts`
+- [x] T077 [P] Write unit tests for all customer Zod schemas (name boundaries, E.164 phone, email format, search query) in `tests/unit/validations/customers.test.ts`
+- [x] T078 [P] Write unit tests for all sales Zod schemas (cart items, payment methods, quantities, discounts, amounts, UOM precision) in `tests/unit/validations/sales.test.ts`
+- [x] T079 [P] Write unit tests for tax calculation (exclusive, inclusive, zero-rate, rounding, JPY exponent 0, KWD exponent 3) in `tests/unit/sales/tax-calculation.test.ts`
+- [x] T080 [P] Write unit tests for discount allocation (line, order, proportional, zero-subtotal guard) in `tests/unit/sales/discount-allocation.test.ts`
+- [x] T081 [P] Write unit tests for canonical hash construction (payment normalization, reference_no null/empty/whitespace, array sort determinism, amount_tendered/change_due sensitivity) in `tests/unit/sales/canonical-hash.test.ts`
+- [x] T082 [P] Write unit tests for refund calculation (proportional, residual absorption on final return, cumulative cap) in `tests/unit/sales/refund-calculation.test.ts`
 
 ### Integration Tests — RPCs
 
-- [ ] T083 [P] Write integration tests for `execute_sale` RPC in `tests/integration/sales/execute-sale.test.ts`: walk-in guest (tax-exclusive), registered customer (tax-inclusive), split payment, cash change, zero-value sale, idempotency replay/conflict, insufficient stock, archived/inactive product, duplicate product, empty cart, payment under/overpayment, payment reference validation, concurrent last-unit checkout
-- [ ] T084 [P] Write integration tests for `void_sale` RPC in `tests/integration/sales/void-sale.test.ts`: cash void (immediate), external void with/without reference (pending), void blocked if returns exist, void blocked if already voided, cashier rejection, void idempotency, inventory restoration verification
-- [ ] T085 [P] Write integration tests for `execute_sale_return` RPC in `tests/integration/sales/execute-sale-return.test.ts`: partial return with/without restock, excess quantity, duplicate return item, inactive product restock blocked, cross-sale FK enforcement, return idempotency, split-tender ceiling, cumulative refund cap, proportional refund math
-- [ ] T086 [P] Write integration tests for `confirm_refund_reimbursement` RPC in `tests/integration/sales/confirm-refund.test.ts`: F005-046 Cases A (replay), B (conflict payload), C (cross-refund collision), D (already settled), E (concurrent serialization)
-- [ ] T087 [P] Write integration tests for `record_refund_failure` and `issue_replacement_refund` RPCs in `tests/integration/sales/refund-lifecycle.test.ts`: failure recording, replacement with obligation tracking (F005-044), unconditional obligation lock, P0064 (active attempt), P0067 (completed obligation), multi-failure chain R1→R2→R3, cross-sale parent refund FK, concurrent replacement serialization
-- [ ] T088 [P] Write integration tests for customer RPCs (`create_customer`, `update_customer`, `archive_customer`) in `tests/integration/customers/customer-crud.test.ts`: normalization, duplicate phone/email, tenant-scoped uniqueness, archival with history, idempotent archive
-- [ ] T089 [P] Write integration tests for `update_tax_settings` and `get_sale_detail` RPCs in `tests/integration/sales/tax-and-detail.test.ts`: upsert behavior, rate validation, `get_sale_detail` cost masking (dual-permission check)
+- [x] T083 [P] Write integration tests for `execute_sale` RPC in `tests/integration/sales/execute-sale.test.ts`: walk-in guest (tax-exclusive), registered customer (tax-inclusive), split payment, cash change, zero-value sale, idempotency replay/conflict, insufficient stock, archived/inactive product, duplicate product, empty cart, payment under/overpayment, payment reference validation, concurrent last-unit checkout
+- [x] T084 [P] Write integration tests for `void_sale` RPC in `tests/integration/sales/void-sale.test.ts`: cash void (immediate), external void with/without reference (pending), void blocked if returns exist, void blocked if already voided, cashier rejection, void idempotency, inventory restoration verification
+- [x] T085 [P] Write integration tests for `execute_sale_return` RPC in `tests/integration/sales/execute-sale-return.test.ts`: partial return with/without restock, excess quantity, duplicate return item, inactive product restock blocked, cross-sale FK enforcement, return idempotency, split-tender ceiling, cumulative refund cap, proportional refund math
+- [x] T086 [P] Write integration tests for `confirm_refund_reimbursement` RPC in `tests/integration/sales/confirm-refund.test.ts`: F005-046 Cases A (replay), B (conflict payload), C (cross-refund collision), D (already settled), E (concurrent serialization)
+- [x] T087 [P] Write integration tests for `record_refund_failure` and `issue_replacement_refund` RPCs in `tests/integration/sales/refund-lifecycle.test.ts`: failure recording, replacement with obligation tracking (F005-044), unconditional obligation lock, P0064 (active attempt), P0067 (completed obligation), multi-failure chain R1→R2→R3, cross-sale parent refund FK, concurrent replacement serialization
+- [x] T088 [P] Write integration tests for customer RPCs (`create_customer`, `update_customer`, `archive_customer`) in `tests/integration/customers/customer-crud.test.ts`: normalization, duplicate phone/email, tenant-scoped uniqueness, archival with history, idempotent archive
+- [x] T089 [P] Write integration tests for `update_tax_settings` and `get_sale_detail` RPCs in `tests/integration/sales/tax-and-detail.test.ts`: upsert behavior, rate validation, `get_sale_detail` cost masking (dual-permission check)
 
 ### Integration Tests — Security, RLS & Column Privileges
 
-- [ ] T090 Write integration tests for RLS and column privileges in `tests/integration/security/rls-and-column-security.test.ts`: S08a (cashier direct PostgREST `unit_cost` → `42501`), S08b (cashier RPC → null), S08c (valuation-only → null), S08d (product-cost-only → null), S08e (both permissions → actual cost), S08f (cross-tenant → P0048), S08g (safe columns via PostgREST → success), S01–S07 (permission rejections, deny-all DML, cross-tenant isolation), S09 (service role key check)
+- [x] T090 Write integration tests for RLS and column privileges in `tests/integration/security/rls-and-column-security.test.ts`: S08a (cashier direct PostgREST `unit_cost` → `42501`), S08b (cashier RPC → null), S08c (valuation-only → null), S08d (product-cost-only → null), S08e (both permissions → actual cost), S08f (cross-tenant → P0048), S08g (safe columns via PostgREST → success), S01–S07 (permission rejections, deny-all DML, cross-tenant isolation), S09 (service role key check)
 
 ### Integration Tests — Concurrency & Foreign Key Integrity
 
-- [ ] T091 Write integration tests for concurrency and FK integrity in `tests/integration/concurrency/obligation-and-fk.test.ts`: C44-01 through C44-05 (obligation lock serialization), C45-01 through C45-07 (composite FK integrity including deferred obligation FK), C46-A through C46-E (confirmation idempotency), C47-01 through C47-05 (payment canonical normalization)
+- [x] T091 Write integration tests for concurrency and FK integrity in `tests/integration/concurrency/obligation-and-fk.test.ts`: C44-01 through C44-05 (obligation lock serialization), C45-01 through C45-07 (composite FK integrity including deferred obligation FK), C46-A through C46-E (confirmation idempotency), C47-01 through C47-05 (payment canonical normalization)
 
 ### Integration Tests — Financial Precision
 
-- [ ] T092 Write integration tests for financial precision in `tests/integration/financial/precision.test.ts`: F01–F11 (tax-exclusive/inclusive, zero-rate, multi-item rounding, currency exponents JPY/KWD, max quantity, decimal precision, discrete UOM, proportional return, final remaining absorption)
+- [x] T092 Write integration tests for financial precision in `tests/integration/financial/precision.test.ts`: F01–F11 (tax-exclusive/inclusive, zero-rate, multi-item rounding, currency exponents JPY/KWD, max quantity, decimal precision, discrete UOM, proportional return, final remaining absorption)
 
 ### E2E Tests
 
-- [ ] T093 [P] Write E2E test for POS checkout flow in `tests/e2e/sales/pos-checkout.e2e.ts`: product search, cart add, quantity edit, discount, customer attach, split payment, receipt display
-- [ ] T094 [P] Write E2E test for customer management flow in `tests/e2e/customers/customer-management.e2e.ts`: create, search, edit, archive, purchase history
-- [ ] T095 [P] Write E2E test for sales history and receipt in `tests/e2e/sales/sales-history.e2e.ts`: list filter, detail view, thermal receipt print
-- [ ] T096 Write E2E test for void and return flow in `tests/e2e/sales/void-and-return.e2e.ts`: complete sale, void, return with restock, refund lifecycle
+- [x] T093 [P] Write E2E test for POS checkout flow in `tests/e2e/sales/pos-checkout.e2e.ts`: product search, cart add, quantity edit, discount, customer attach, split payment, receipt display
+- [x] T094 [P] Write E2E test for customer management flow in `tests/e2e/customers/customer-management.e2e.ts`: create, search, edit, archive, purchase history
+- [x] T095 [P] Write E2E test for sales history and receipt in `tests/e2e/sales/sales-history.e2e.ts`: list filter, detail view, thermal receipt print
+- [x] T096 Write E2E test for void and return flow in `tests/e2e/sales/void-and-return.e2e.ts`: complete sale, void, return with restock, refund lifecycle
 
 ### Final Verification
 
-- [ ] T097 Run full regression suite: `npm run test && npx playwright test`
-- [ ] T098 Run schema verification queries from `specs/005-customers-sales/quickstart.md` to confirm 9 tables, 11 RPCs, 12 permissions
-- [ ] T099 Verify zero regression in F001–F004 test suites
+- [x] T097 Run full regression suite: `npm run test && npx playwright test`
+- [x] T098 Run schema verification queries from `specs/005-customers-sales/quickstart.md` to confirm 9 tables, 11 RPCs, 12 permissions
+- [x] T099 Verify zero regression in F001–F004 test suites
 
 **Checkpoint**: All tests pass. Zero regressions. Feature 005 is complete.
 
