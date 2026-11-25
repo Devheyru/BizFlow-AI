@@ -48,9 +48,9 @@ export function CheckoutReceipt({
       role="dialog"
       aria-modal="true"
       aria-labelledby="receipt-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 flex flex-col max-h-[95vh]">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 dark:border-gray-800 flex flex-col max-h-[95vh]">
         {/* Success Banner */}
         <div className="bg-emerald-600 text-white p-5 text-center flex flex-col items-center">
           <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-2">
@@ -168,7 +168,7 @@ export function CheckoutReceipt({
         </div>
 
         {/* Action Buttons */}
-        <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+        <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/80 flex items-center justify-between gap-3">
           <Button
             type="button"
             variant="outline"
@@ -182,7 +182,7 @@ export function CheckoutReceipt({
           <Button
             type="button"
             onClick={onNewSale}
-            className="flex-1 flex items-center justify-center gap-1.5 h-10 font-bold bg-primary text-white"
+            className="flex-1 flex items-center justify-center gap-1.5 h-10 font-bold bg-blue-600 hover:bg-blue-700 text-white"
           >
             <PlusCircle className="w-4 h-4" />
             <span>New Sale</span>

@@ -171,16 +171,16 @@ export function PaymentModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="payment-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 dark:border-gray-800 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/80">
           <div>
-            <h3 id="payment-modal-title" className="font-bold text-lg text-gray-900">
+            <h3 id="payment-modal-title" className="font-bold text-lg text-gray-900 dark:text-gray-100">
               Process Payment
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               Select payment methods to complete sale
             </p>
           </div>
@@ -190,7 +190,7 @@ export function PaymentModal({
             size="sm"
             onClick={onClose}
             disabled={isSubmitting}
-            className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
+            className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
           >
             <X className="w-5 h-5" />
           </Button>
@@ -199,24 +199,26 @@ export function PaymentModal({
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-5">
           {/* Payable vs Running Balance Banner */}
-          <div className="grid grid-cols-3 gap-3 bg-gray-50 p-3.5 rounded-xl border border-gray-200/70 text-center">
+          <div className="grid grid-cols-3 gap-3 bg-gray-50 dark:bg-gray-800/60 p-3.5 rounded-xl border border-gray-200/70 dark:border-gray-800 text-center">
             <div>
-              <span className="text-xs text-gray-500">Payable Total</span>
-              <div className="font-bold text-gray-900 text-base mt-0.5">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Payable Total</span>
+              <div className="font-bold text-gray-900 dark:text-gray-100 text-base mt-0.5">
                 {currency} {totalPayable.toFixed(2)}
               </div>
             </div>
             <div>
-              <span className="text-xs text-gray-500">Total Tendered</span>
-              <div className="font-bold text-emerald-600 text-base mt-0.5">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Total Tendered</span>
+              <div className="font-bold text-emerald-600 dark:text-emerald-400 text-base mt-0.5">
                 {currency} {totalPaid.toFixed(2)}
               </div>
             </div>
             <div>
-              <span className="text-xs text-gray-500">Balance Due</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Balance Due</span>
               <div
                 className={`font-bold text-base mt-0.5 ${
-                  remainingBalance === 0 ? "text-emerald-600" : "text-amber-600"
+                  remainingBalance === 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-amber-600 dark:text-amber-400"
                 }`}
               >
                 {currency} {remainingBalance.toFixed(2)}
@@ -227,33 +229,33 @@ export function PaymentModal({
           {/* Existing Tenders List */}
           {tenders.length > 0 && (
             <div className="space-y-2">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Recorded Payments ({tenders.length})
               </span>
-              <div className="divide-y divide-gray-100 border border-gray-200/80 rounded-xl overflow-hidden bg-white">
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200/80 dark:border-gray-800 rounded-xl overflow-hidden bg-white dark:bg-gray-900">
                 {tenders.map((tender) => {
                   const config = PAYMENT_METHOD_CONFIG[tender.paymentMethod];
                   const Icon = config.icon;
                   return (
                     <div
                       key={tender.id}
-                      className="flex items-center justify-between p-3 text-sm hover:bg-gray-50/50"
+                      className="flex items-center justify-between p-3 text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800/40"
                     >
                       <div className="flex items-center gap-2.5">
                         <div className={`p-1.5 rounded-lg border ${config.color}`}>
                           <Icon className="w-4 h-4" />
                         </div>
                         <div>
-                          <span className="font-medium text-gray-900">{config.label}</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{config.label}</span>
                           {tender.referenceNo && (
-                            <span className="text-xs text-gray-500 ml-2 font-mono">
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 font-mono">
                               Ref: {tender.referenceNo}
                             </span>
                           )}
                           {tender.paymentMethod === "cash" &&
                             tender.changeDue != null &&
                             tender.changeDue > 0 && (
-                              <div className="text-xs text-emerald-600">
+                              <div className="text-xs text-emerald-600 dark:text-emerald-400">
                                 Tendered: {currency} {tender.amountTendered?.toFixed(2)} | Change:{" "}
                                 {currency} {tender.changeDue.toFixed(2)}
                               </div>
@@ -261,7 +263,7 @@ export function PaymentModal({
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-gray-900">
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">
                           {currency} {tender.amount.toFixed(2)}
                         </span>
                         <Button
@@ -270,7 +272,7 @@ export function PaymentModal({
                           size="sm"
                           onClick={() => handleRemoveTender(tender.id)}
                           disabled={isSubmitting}
-                          className="h-7 w-7 p-0 text-gray-400 hover:text-red-600"
+                          className="h-7 w-7 p-0 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                           aria-label="Remove payment tender"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -285,13 +287,13 @@ export function PaymentModal({
 
           {/* Add Tender Form (only when remaining balance > 0) */}
           {remainingBalance > 0 && (
-            <div className="border border-gray-200 rounded-xl p-4 bg-white space-y-4 shadow-sm">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+            <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-white dark:bg-gray-900 space-y-4 shadow-sm">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">
                 Add Tender Method
               </span>
 
               {/* Payment Method Selector Grid */}
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {(Object.keys(PAYMENT_METHOD_CONFIG) as PaymentMethod[]).map((method) => {
                   const cfg = PAYMENT_METHOD_CONFIG[method];
                   const Icon = cfg.icon;
@@ -306,8 +308,8 @@ export function PaymentModal({
                       }}
                       className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all ${
                         isSelected
-                          ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20 font-semibold"
-                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                          ? "border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20 font-semibold dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-300"
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                       }`}
                     >
                       <Icon className="w-4 h-4 mb-1" />
@@ -321,7 +323,7 @@ export function PaymentModal({
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label htmlFor="tender-amount-input" className="text-xs text-gray-600">
+                    <Label htmlFor="tender-amount-input" className="text-xs text-gray-600 dark:text-gray-400">
                       Payment Amount
                     </Label>
                     <Input
@@ -339,7 +341,7 @@ export function PaymentModal({
 
                   {activeMethod === "cash" ? (
                     <div>
-                      <Label htmlFor="cash-tendered-input" className="text-xs text-gray-600">
+                      <Label htmlFor="cash-tendered-input" className="text-xs text-gray-600 dark:text-gray-400">
                         Cash Received
                       </Label>
                       <Input
@@ -355,7 +357,7 @@ export function PaymentModal({
                     </div>
                   ) : (
                     <div>
-                      <Label htmlFor="tender-ref-input" className="text-xs text-gray-600">
+                      <Label htmlFor="tender-ref-input" className="text-xs text-gray-600 dark:text-gray-400">
                         Transaction Reference *
                       </Label>
                       <Input
@@ -401,7 +403,7 @@ export function PaymentModal({
 
                 {/* Cash Change Preview */}
                 {activeMethod === "cash" && (
-                  <div className="flex justify-between items-center text-xs p-2 bg-emerald-50 rounded-lg text-emerald-800 border border-emerald-100">
+                  <div className="flex justify-between items-center text-xs p-2 bg-emerald-50 dark:bg-emerald-950/50 rounded-lg text-emerald-800 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900">
                     <span>Change Due:</span>
                     <span className="font-bold text-sm">
                       {currency}{" "}
@@ -417,7 +419,7 @@ export function PaymentModal({
 
               {/* Validation Error Message */}
               {validationError && (
-                <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 p-2 rounded-lg border border-red-200">
+                <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 p-2 rounded-lg border border-red-200 dark:border-red-900">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>{validationError}</span>
                 </div>
@@ -438,12 +440,16 @@ export function PaymentModal({
 
           {/* Change Due Summary Banner when sale is balanced */}
           {isComplete && totalChangeDue > 0 && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex justify-between items-center">
+            <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900 rounded-xl p-3 flex justify-between items-center">
               <div>
-                <span className="text-xs text-emerald-700 font-medium">Customer Change Due</span>
-                <p className="text-xs text-emerald-600">Return to customer from cash drawer</p>
+                <span className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">
+                  Customer Change Due
+                </span>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                  Return to customer from cash drawer
+                </p>
               </div>
-              <span className="text-xl font-black text-emerald-800">
+              <span className="text-xl font-black text-emerald-800 dark:text-emerald-200">
                 {currency} {totalChangeDue.toFixed(2)}
               </span>
             </div>
@@ -451,13 +457,13 @@ export function PaymentModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between gap-3">
+        <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/80 flex items-center justify-between gap-3">
           <Button
             type="button"
             variant="ghost"
             onClick={onClose}
             disabled={isSubmitting}
-            className="text-gray-600"
+            className="text-gray-600 dark:text-gray-300"
           >
             Cancel
           </Button>
@@ -466,7 +472,7 @@ export function PaymentModal({
             type="button"
             onClick={() => onConfirmPayments(tenders)}
             disabled={!isComplete || isSubmitting}
-            className="px-6 h-10 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md disabled:bg-gray-300"
+            className="px-6 h-10 font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md disabled:bg-gray-200 disabled:text-gray-500 dark:disabled:bg-gray-800 dark:disabled:text-gray-500 disabled:opacity-100"
           >
             {isSubmitting ? (
               <span className="flex items-center gap-2">Processing Sale...</span>

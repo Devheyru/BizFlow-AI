@@ -101,6 +101,8 @@ export default async function PosPage({ params }: PosPageProps) {
     name: c.name,
   }));
 
+  const canCreateCustomer = hasPermission(context, "customers:create");
+
   return (
     <PosCartView
       slug={slug}
@@ -110,6 +112,7 @@ export default async function PosPage({ params }: PosPageProps) {
       products={products}
       categories={categories}
       taxSettings={taxSettings}
+      canCreateCustomer={canCreateCustomer}
     />
   );
 }

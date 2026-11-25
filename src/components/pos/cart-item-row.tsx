@@ -73,112 +73,124 @@ export function CartItemRow({
   return (
     <div
       data-testid={`cart-item-row-${item.productId}`}
-      className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border-b border-gray-100 hover:bg-gray-50/50 gap-3"
+      className="flex flex-col p-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/40 gap-2.5"
     >
-      {/* Product Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900 truncate">{item.name}</span>
-          {isOverStock && (
-            <span
-              title={`Requested quantity (${item.quantity}) exceeds on-hand stock (${item.stockQuantity})`}
-              className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200"
-            >
-              <AlertTriangle className="w-3 h-3 text-amber-600" />
-              Low Stock
+      {/* Top Row: Product Info + Net Total & Remove */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+              {item.name}
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-          <span>SKU: {item.sku}</span>
-          <span>•</span>
-          <span>
-            {currency} {item.unitPrice.toFixed(2)}
-            {item.unitOfMeasure ? ` / ${item.unitOfMeasure}` : ""}
-          </span>
-          <span>•</span>
-          <span className={item.stockQuantity <= 0 ? "text-red-600 font-medium" : "text-gray-500"}>
-            Stock: {item.stockQuantity}
-          </span>
-        </div>
-      </div>
-
-      {/* Quantity Controls */}
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => handleStepQuantity(-1)}
-          disabled={disabled || item.quantity <= (isDiscrete ? 1 : 0.0001)}
-          aria-label="Decrease quantity"
-        >
-          <Minus className="w-3.5 h-3.5" />
-        </Button>
-        <Input
-          type="number"
-          step={isDiscrete ? "1" : "0.0001"}
-          min={isDiscrete ? "1" : "0.0001"}
-          value={item.quantity}
-          onChange={(e) => handleQuantityChange(e.target.value)}
-          disabled={disabled}
-          className="h-8 w-16 text-center px-1 text-sm font-medium"
-          aria-label="Item quantity"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => handleStepQuantity(1)}
-          disabled={disabled}
-          aria-label="Increase quantity"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </Button>
-      </div>
-
-      {/* Line Discount Input */}
-      <div className="flex items-center gap-1">
-        <span className="text-xs text-gray-400">Disc:</span>
-        <Input
-          type="number"
-          step="0.01"
-          min="0"
-          max={lineGross}
-          value={item.lineDiscountAmount || ""}
-          placeholder="0.00"
-          onChange={(e) => handleDiscountChange(e.target.value)}
-          disabled={disabled}
-          className="h-8 w-20 text-right px-2 text-sm"
-          aria-label="Line discount amount"
-        />
-      </div>
-
-      {/* Net Total & Remove */}
-      <div className="flex items-center justify-end gap-3 min-w-[110px]">
-        <div className="text-right">
-          <div className="font-semibold text-gray-900 text-sm">
-            {currency} {lineNet.toFixed(2)}
+            {isOverStock && (
+              <span
+                title={`Requested quantity (${item.quantity}) exceeds on-hand stock (${item.stockQuantity})`}
+                className="inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 shrink-0"
+              >
+                <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                Low Stock
+              </span>
+            )}
           </div>
-          {item.lineDiscountAmount > 0 && (
-            <div className="text-xs text-gray-400 line-through">
-              {currency} {lineGross.toFixed(2)}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <span>SKU: {item.sku}</span>
+            <span>•</span>
+            <span>
+              {currency} {item.unitPrice.toFixed(2)}
+              {item.unitOfMeasure ? ` / ${item.unitOfMeasure}` : ""}
+            </span>
+            <span>•</span>
+            <span
+              className={
+                item.stockQuantity <= 0
+                  ? "text-red-600 dark:text-red-400 font-medium"
+                  : "text-gray-500 dark:text-gray-400"
+              }
+            >
+              Stock: {item.stockQuantity}
+            </span>
+          </div>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => onRemove(item.productId)}
-          disabled={disabled}
-          className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
-          aria-label={`Remove ${item.name} from cart`}
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm whitespace-nowrap">
+              {currency} {lineNet.toFixed(2)}
+            </div>
+            {item.lineDiscountAmount > 0 && (
+              <div className="text-xs text-gray-400 dark:text-gray-500 line-through whitespace-nowrap">
+                {currency} {lineGross.toFixed(2)}
+              </div>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onRemove(item.productId)}
+            disabled={disabled}
+            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-950/50"
+            aria-label={`Remove ${item.name} from cart`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Bottom Row: Quantity Stepper + Line Discount */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {/* Quantity Controls */}
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => handleStepQuantity(-1)}
+            disabled={disabled || item.quantity <= (isDiscrete ? 1 : 0.0001)}
+            aria-label="Decrease quantity"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </Button>
+          <Input
+            type="number"
+            step={isDiscrete ? "1" : "0.0001"}
+            min={isDiscrete ? "1" : "0.0001"}
+            value={item.quantity}
+            onChange={(e) => handleQuantityChange(e.target.value)}
+            disabled={disabled}
+            className="h-8 w-16 text-center px-1 text-sm font-medium"
+            aria-label="Item quantity"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => handleStepQuantity(1)}
+            disabled={disabled}
+            aria-label="Increase quantity"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+
+        {/* Line Discount Input */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500 dark:text-gray-400">Disc:</span>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            max={lineGross}
+            value={item.lineDiscountAmount || ""}
+            placeholder="0.00"
+            onChange={(e) => handleDiscountChange(e.target.value)}
+            disabled={disabled}
+            className="h-8 w-20 text-right px-2 text-sm"
+            aria-label="Line discount amount"
+          />
+        </div>
       </div>
     </div>
   );

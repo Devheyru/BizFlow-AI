@@ -45,18 +45,18 @@ export function CheckoutSummary({
   };
 
   return (
-    <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-200/80 space-y-3">
+    <div className="bg-gray-50/80 dark:bg-gray-800/50 rounded-xl p-3.5 border border-gray-200/80 dark:border-gray-800 space-y-2">
       {/* Gross Subtotal */}
-      <div className="flex justify-between items-center text-sm text-gray-600">
+      <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
         <span>Items Subtotal</span>
-        <span className="font-medium text-gray-900">
+        <span className="font-medium text-gray-900 dark:text-gray-100">
           {currency} {subtotal.toFixed(2)}
         </span>
       </div>
 
       {/* Line Discounts Summary */}
       {totalLineDiscounts > 0 && (
-        <div className="flex justify-between items-center text-sm text-emerald-700">
+        <div className="flex justify-between items-center text-sm text-emerald-700 dark:text-emerald-400">
           <span>Line Discounts</span>
           <span className="font-medium">
             - {currency} {totalLineDiscounts.toFixed(2)}
@@ -68,13 +68,13 @@ export function CheckoutSummary({
       <div className="flex justify-between items-center text-sm gap-2">
         <label
           htmlFor="order-discount-input"
-          className="flex items-center gap-1.5 text-gray-700 font-medium"
+          className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 font-medium"
         >
-          <Tag className="w-4 h-4 text-gray-500" />
+          <Tag className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           <span>Order Discount</span>
         </label>
         <div className="flex items-center gap-1">
-          <span className="text-gray-400 text-sm">- {currency}</span>
+          <span className="text-gray-400 dark:text-gray-500 text-sm">- {currency}</span>
           <Input
             id="order-discount-input"
             type="number"
@@ -85,33 +85,33 @@ export function CheckoutSummary({
             placeholder="0.00"
             onChange={(e) => handleDiscountChange(e.target.value)}
             disabled={disabled || netSubtotal === 0}
-            className="h-8 w-24 text-right px-2 text-sm bg-white"
+            className="h-8 w-24 text-right px-2 text-sm"
             aria-label="Order discount amount"
           />
         </div>
       </div>
 
       {/* Tax Breakdown */}
-      <div className="flex justify-between items-center text-sm text-gray-600 pt-1 border-t border-gray-200/60">
+      <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400 pt-1 border-t border-gray-200/60 dark:border-gray-700/60">
         <span className="flex items-center gap-1.5">
-          <Receipt className="w-4 h-4 text-gray-400" />
+          <Receipt className="w-4 h-4 text-gray-400 dark:text-gray-500" />
           <span>
             {taxName} ({taxRate.toFixed(2)}%)
           </span>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-400 dark:text-gray-500">
             {isTaxInclusive ? "(Included)" : "(Added)"}
           </span>
         </span>
-        <span className="font-medium text-gray-700">
+        <span className="font-medium text-gray-700 dark:text-gray-300">
           {currency} {taxAmount.toFixed(2)}
         </span>
       </div>
 
       {/* Final Total Payable */}
-      <div className="flex justify-between items-baseline pt-2 border-t-2 border-gray-300">
-        <span className="text-base font-bold text-gray-900">Total Payable</span>
+      <div className="flex justify-between items-baseline pt-2 border-t-2 border-gray-300 dark:border-gray-700">
+        <span className="text-base font-bold text-gray-900 dark:text-gray-100">Total Payable</span>
         <div className="text-right">
-          <span className="text-2xl font-black text-gray-900 tracking-tight">
+          <span className="text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tight">
             {currency} {totalPayable.toFixed(2)}
           </span>
         </div>

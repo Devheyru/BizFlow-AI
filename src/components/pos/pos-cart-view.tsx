@@ -52,6 +52,7 @@ export interface PosCartViewProps {
   products: PosProduct[];
   categories: PosCategory[];
   taxSettings: PosTaxSettings;
+  canCreateCustomer?: boolean;
 }
 
 export function PosCartView({
@@ -62,6 +63,7 @@ export function PosCartView({
   products,
   categories,
   taxSettings,
+  canCreateCustomer = true,
 }: PosCartViewProps) {
   // Cart state
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -232,19 +234,19 @@ export function PosCartView({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-7xl mx-auto p-4 gap-4 overflow-hidden">
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-8.5rem)] lg:overflow-hidden">
       {/* Top Bar: Register Header & Customer Picker */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-sm shrink-0">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-900 p-3.5 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight flex items-center gap-2">
             <span>POS Register</span>
-            <span className="text-xs bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-medium px-2 py-0.5 rounded-full">
               Live
             </span>
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Cashier: <span className="font-medium text-gray-700">{cashierName}</span> • Store:{" "}
-            <span className="font-medium text-gray-700">{organizationName}</span>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Cashier: <span className="font-medium text-gray-700 dark:text-gray-300">{cashierName}</span> • Store:{" "}
+            <span className="font-medium text-gray-700 dark:text-gray-300">{organizationName}</span>
           </p>
         </div>
 
@@ -257,17 +259,18 @@ export function PosCartView({
               clearError();
               setSelectedCustomer(c);
             }}
+            canCreateCustomer={canCreateCustomer}
             disabled={isSubmitting}
           />
         </div>
       </div>
 
       {/* Main Register Grid: Left Catalog, Right Cart */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:min-h-0 lg:overflow-hidden">
         {/* Left Column: Product Search & Catalog (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden min-h-0">
+        <div className="lg:col-span-7 flex flex-col bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm overflow-hidden max-h-[28rem] lg:max-h-none lg:min-h-0">
           {/* Catalog Search & Category Filter Bar */}
-          <div className="p-3.5 border-b border-gray-100 flex flex-col sm:flex-row items-center gap-2 bg-gray-50/50 shrink-0">
+          <div className="p-3.5 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center gap-2 bg-gray-50/50 dark:bg-gray-900/80 shrink-0">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <Input
@@ -275,7 +278,7 @@ export function PosCartView({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products by name, SKU, barcode..."
-                className="pl-9 h-9 text-sm bg-white"
+                className="pl-9 h-9 text-sm"
                 aria-label="Product search"
               />
             </div>
@@ -284,7 +287,7 @@ export function PosCartView({
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="h-9 px-3 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20 shrink-0"
+                className="h-9 w-full sm:w-auto px-3 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shrink-0"
                 aria-label="Category filter"
               >
                 <option value="all">All Categories</option>
@@ -300,10 +303,10 @@ export function PosCartView({
           {/* Product Cards Grid */}
           <div className="flex-1 p-3.5 overflow-y-auto min-h-0">
             {filteredProducts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8 text-gray-400">
-                <Package className="w-10 h-10 mb-2 stroke-1 text-gray-300" />
-                <p className="text-sm font-medium text-gray-600">No sellable products found</p>
-                <p className="text-xs text-gray-400 mt-1">
+              <div className="flex flex-col items-center justify-center h-full min-h-[12rem] text-center p-8 text-gray-400">
+                <Package className="w-10 h-10 mb-2 stroke-1 text-gray-300 dark:text-gray-600" />
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">No sellable products found</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                   Try adjusting your search query or category filter
                 </p>
               </div>
@@ -321,36 +324,36 @@ export function PosCartView({
                       onClick={() => handleAddToCart(p)}
                       className={`text-left p-3 rounded-xl border transition-all flex flex-col justify-between relative group ${
                         inCartQty > 0
-                          ? "border-primary/50 bg-primary/5 shadow-xs"
-                          : "border-gray-200/90 bg-white hover:border-gray-300 hover:shadow-xs"
+                          ? "border-blue-500 bg-blue-50/70 dark:border-blue-500 dark:bg-blue-950/40 shadow-sm"
+                          : "border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-sm"
                       }`}
                     >
                       {inCartQty > 0 && (
-                        <span className="absolute top-2 right-2 bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        <span className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
                           {inCartQty} in cart
                         </span>
                       )}
 
-                      <div>
-                        <div className="font-semibold text-gray-900 text-sm line-clamp-2 leading-tight">
+                      <div className={inCartQty > 0 ? "pr-14" : ""}>
+                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm line-clamp-2 leading-tight">
                           {p.name}
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">
+                        <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">
                           SKU: {p.sku}
                         </div>
                       </div>
 
-                      <div className="mt-3 flex items-baseline justify-between pt-2 border-t border-gray-100">
-                        <span className="font-bold text-gray-900 text-sm">
+                      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <span className="font-bold text-gray-900 dark:text-gray-100 text-sm">
                           {currency} {p.selling_price.toFixed(2)}
                         </span>
                         <span
                           className={`text-[10px] font-medium ${
                             isOutOfStock
-                              ? "text-red-500"
+                              ? "text-red-500 dark:text-red-400"
                               : p.stock_quantity <= 5
-                              ? "text-amber-600"
-                              : "text-gray-400"
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-gray-400 dark:text-gray-500"
                           }`}
                         >
                           {isOutOfStock ? "Out of stock" : `${p.stock_quantity} in stock`}
@@ -365,12 +368,12 @@ export function PosCartView({
         </div>
 
         {/* Right Column: Cart & Checkout (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden min-h-0">
+        <div className="lg:col-span-5 flex flex-col bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm overflow-hidden lg:min-h-0">
           {/* Cart Header */}
-          <div className="p-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
+          <div className="p-3.5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/80 shrink-0">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-gray-700" />
-              <h2 className="font-bold text-gray-900 text-sm">
+              <ShoppingCart className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+              <h2 className="font-bold text-gray-900 dark:text-gray-100 text-sm">
                 Active Cart ({cartItems.length} {cartItems.length === 1 ? "item" : "items"})
               </h2>
             </div>
@@ -382,7 +385,7 @@ export function PosCartView({
                 size="sm"
                 onClick={handleClearCart}
                 disabled={isSubmitting}
-                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50 h-7 px-2"
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1" />
                 Clear
@@ -398,12 +401,12 @@ export function PosCartView({
           )}
 
           {/* Cart Items List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-100 min-h-0">
+          <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 min-h-[10rem] lg:min-h-0">
             {cartItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8 text-gray-400">
-                <ShoppingCart className="w-12 h-12 mb-2 stroke-1 text-gray-200" />
-                <p className="text-sm font-medium text-gray-600">Cart is empty</p>
-                <p className="text-xs text-gray-400 mt-1">
+              <div className="flex flex-col items-center justify-center h-full min-h-[10rem] text-center p-8 text-gray-400">
+                <ShoppingCart className="w-12 h-12 mb-2 stroke-1 text-gray-200 dark:text-gray-700" />
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Cart is empty</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                   Click on products from the catalog to add items
                 </p>
               </div>
@@ -423,7 +426,7 @@ export function PosCartView({
           </div>
 
           {/* Cart Footer: Summary & Checkout Button */}
-          <div className="p-4 border-t border-gray-100 bg-gray-50/50 shrink-0 space-y-3">
+          <div className="p-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/80 shrink-0 space-y-2.5">
             <CheckoutSummary
               currency={currency}
               subtotal={cartFinancials.subtotal}
@@ -448,7 +451,7 @@ export function PosCartView({
                 setIsPaymentModalOpen(true);
               }}
               disabled={cartItems.length === 0 || isSubmitting}
-              className="w-full h-12 text-base font-bold bg-primary text-white hover:bg-primary/95 shadow-md flex items-center justify-center gap-2 rounded-xl"
+              className="w-full h-11 text-base font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-md flex items-center justify-center gap-2 rounded-xl"
             >
               <span>Proceed to Payment</span>
               <ArrowRight className="w-4 h-4" />

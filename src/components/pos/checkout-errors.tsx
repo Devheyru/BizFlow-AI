@@ -67,17 +67,17 @@ export function CheckoutErrors({ error, onDismiss }: CheckoutErrorsProps) {
     <div
       role="alert"
       data-testid="checkout-error-banner"
-      className="bg-red-50 border border-red-200 text-red-900 rounded-xl p-4 shadow-sm relative animate-in fade-in-50 duration-200"
+      className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-red-900 dark:text-red-200 rounded-xl p-4 shadow-sm relative"
     >
       <div className="flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+        <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
         <div className="flex-1 pr-6">
-          <h4 className="font-semibold text-sm text-red-900">{title}</h4>
-          <p className="text-sm text-red-700 mt-0.5 leading-relaxed">{guidance}</p>
+          <h4 className="font-semibold text-sm text-red-900 dark:text-red-100">{title}</h4>
+          <p className="text-sm text-red-700 dark:text-red-300 mt-0.5 leading-relaxed">{guidance}</p>
 
           {/* Validation field details if present */}
           {error.details && Object.keys(error.details).length > 0 && (
-            <ul className="mt-2 text-xs text-red-600 list-disc list-inside space-y-0.5">
+            <ul className="mt-2 text-xs text-red-600 dark:text-red-400 list-disc list-inside space-y-0.5">
               {Object.entries(error.details).map(([field, msgs]) =>
                 msgs.map((m, idx) => (
                   <li key={`${field}-${idx}`}>
@@ -93,7 +93,7 @@ export function CheckoutErrors({ error, onDismiss }: CheckoutErrorsProps) {
           variant="ghost"
           size="sm"
           onClick={onDismiss}
-          className="absolute top-2 right-2 h-7 w-7 p-0 text-red-400 hover:text-red-700 hover:bg-red-100"
+          className="absolute top-2 right-2 h-7 w-7 p-0 text-red-400 hover:text-red-700 hover:bg-red-100 dark:hover:text-red-200 dark:hover:bg-red-900/50"
           aria-label="Dismiss error"
         >
           <X className="w-4 h-4" />
