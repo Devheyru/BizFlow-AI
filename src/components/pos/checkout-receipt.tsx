@@ -65,22 +65,25 @@ export function CheckoutReceipt({
         </div>
 
         {/* Printable Receipt Content */}
-        <div id="printable-receipt" className="p-6 overflow-y-auto space-y-4 text-xs font-mono text-gray-800">
+        <div
+          id="printable-receipt"
+          className="p-6 overflow-y-auto space-y-4 text-xs font-mono text-gray-800 dark:text-gray-200 print:bg-white print:text-black"
+        >
           {/* Header */}
-          <div className="text-center space-y-1 border-b border-dashed border-gray-300 pb-3">
-            <div className="font-bold text-sm tracking-wide uppercase text-gray-900">
+          <div className="text-center space-y-1 border-b border-dashed border-gray-300 dark:border-gray-700 pb-3">
+            <div className="font-bold text-sm tracking-wide uppercase text-gray-900 dark:text-gray-100 print:text-black">
               {organizationName}
             </div>
-            <div className="text-gray-500">Receipt #{saleResult.saleNumber}</div>
-            <div className="text-gray-500">{formattedDate}</div>
-            <div className="text-gray-500">
+            <div className="text-gray-500 dark:text-gray-400">Receipt #{saleResult.saleNumber}</div>
+            <div className="text-gray-500 dark:text-gray-400">{formattedDate}</div>
+            <div className="text-gray-500 dark:text-gray-400">
               Customer: {customer ? customer.name : "Walk-in Guest"}
             </div>
           </div>
 
           {/* Line Items */}
-          <div className="border-b border-dashed border-gray-300 pb-3 space-y-2">
-            <div className="grid grid-cols-12 font-bold text-gray-600">
+          <div className="border-b border-dashed border-gray-300 dark:border-gray-700 pb-3 space-y-2">
+            <div className="grid grid-cols-12 font-bold text-gray-600 dark:text-gray-400">
               <span className="col-span-6">Item</span>
               <span className="col-span-2 text-center">Qty</span>
               <span className="col-span-2 text-right">Price</span>
@@ -90,30 +93,37 @@ export function CheckoutReceipt({
             {items.map((it) => {
               const lineTotal = it.quantity * it.unitPrice - it.lineDiscountAmount;
               return (
-                <div key={it.productId} className="grid grid-cols-12 text-gray-800">
-                  <div className="col-span-6 truncate pr-1">
-                    <div>{it.name}</div>
-                    <div className="text-[10px] text-gray-400">SKU: {it.sku}</div>
+                <div key={it.productId} className="grid grid-cols-12 text-gray-800 dark:text-gray-200">
+                  <div className="col-span-6 pr-2 min-w-0">
+                    <div className="break-words">{it.name}</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400">SKU: {it.sku}</div>
+                    {it.lineDiscountAmount > 0 && (
+                      <div className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                        Disc: -{saleResult.currency} {it.lineDiscountAmount.toFixed(2)}
+                      </div>
+                    )}
                   </div>
                   <div className="col-span-2 text-center">{it.quantity}</div>
                   <div className="col-span-2 text-right">{it.unitPrice.toFixed(2)}</div>
-                  <div className="col-span-2 text-right font-medium">{lineTotal.toFixed(2)}</div>
+                  <div className="col-span-2 text-right font-medium text-gray-900 dark:text-gray-100">
+                    {lineTotal.toFixed(2)}
+                  </div>
                 </div>
               );
             })}
           </div>
 
           {/* Financial Totals */}
-          <div className="space-y-1.5 border-b border-dashed border-gray-300 pb-3">
+          <div className="space-y-1.5 border-b border-dashed border-gray-300 dark:border-gray-700 pb-3">
             <div className="flex justify-between">
-              <span>Subtotal:</span>
+              <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
               <span>
                 {saleResult.currency} {saleResult.subtotal.toFixed(2)}
               </span>
             </div>
 
             {saleResult.orderDiscountAmount > 0 && (
-              <div className="flex justify-between text-emerald-700">
+              <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
                 <span>Order Discount:</span>
                 <span>
                   - {saleResult.currency} {saleResult.orderDiscountAmount.toFixed(2)}
@@ -122,13 +132,13 @@ export function CheckoutReceipt({
             )}
 
             <div className="flex justify-between">
-              <span>Tax:</span>
+              <span className="text-gray-600 dark:text-gray-400">Tax:</span>
               <span>
                 {saleResult.currency} {saleResult.taxAmount.toFixed(2)}
               </span>
             </div>
 
-            <div className="flex justify-between text-sm font-bold pt-1 border-t border-gray-200">
+            <div className="flex justify-between text-sm font-bold text-gray-900 dark:text-gray-100 pt-1.5 border-t border-gray-200 dark:border-gray-700">
               <span>Total:</span>
               <span>
                 {saleResult.currency} {saleResult.totalAmount.toFixed(2)}
@@ -137,10 +147,10 @@ export function CheckoutReceipt({
           </div>
 
           {/* Payments Breakdown */}
-          <div className="space-y-1 border-b border-dashed border-gray-300 pb-3">
-            <span className="font-bold text-gray-700 block">Payments:</span>
+          <div className="space-y-1 border-b border-dashed border-gray-300 dark:border-gray-700 pb-3">
+            <span className="font-bold text-gray-700 dark:text-gray-300 block">Payments:</span>
             {payments.map((p, idx) => (
-              <div key={idx} className="flex justify-between">
+              <div key={idx} className="flex justify-between text-gray-800 dark:text-gray-200">
                 <span className="capitalize">
                   {p.paymentMethod.replace("_", " ")}
                   {p.referenceNo ? ` (${p.referenceNo})` : ""}
@@ -152,7 +162,7 @@ export function CheckoutReceipt({
             ))}
 
             {totalChange > 0 && (
-              <div className="flex justify-between font-bold text-emerald-800 pt-1">
+              <div className="flex justify-between font-bold text-emerald-800 dark:text-emerald-300 pt-1">
                 <span>Change Given:</span>
                 <span>
                   {saleResult.currency} {totalChange.toFixed(2)}
@@ -162,13 +172,13 @@ export function CheckoutReceipt({
           </div>
 
           {/* Footer Note */}
-          <div className="text-center text-[10px] text-gray-400 pt-1">
+          <div className="text-center text-[10px] text-gray-500 dark:text-gray-400 pt-1">
             Thank you for your business!
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/80 flex items-center justify-between gap-3">
+        <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/80 flex items-center justify-between gap-3 print:hidden">
           <Button
             type="button"
             variant="outline"
