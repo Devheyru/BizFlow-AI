@@ -424,12 +424,13 @@ Following Feature 005's two-pass deterministic algorithm (lines sorted by `sort_
      - For $i > k$ (trailing zero-net lines): $\text{alloc\_disc}_i = 0.0000$.
    - Discounted line amount: $\text{line\_discounted}_i = \text{line\_net}_i - \text{alloc\_disc}_i \ge 0.0000$.
 3. **Tax Calculation & Zero-Tax Boundaries**:
-   - Let effective line rate $r_i = 0.0000$ if `invoice.is_tax_exempt = true` OR `line.is_taxable = false` OR `invoice.tax_rate = 0.0000`, else `invoice.tax_rate`.
-   - **Zero Effective Rate ($r_i = 0.0000$) or Zero Discounted Line ($\text{line\_discounted}_i = 0.0000$)**: Both inclusive and exclusive tax modes produce $\text{taxable\_amount}_i = \text{line\_discounted}_i$, $\text{allocated\_tax}_i = 0.0000$, $\text{line\_total}_i = \text{line\_discounted}_i$.
-   - **Tax-Exclusive (`is_tax_inclusive = false`, $r_i > 0$)**:
-     $$\text{taxable\_amount}_i = \text{line\_discounted}_i, \quad \text{allocated\_tax}_i = \text{ROUND}(\text{taxable\_amount}_i \times (r_i / 100),\; \text{decimals}), \quad \text{line\_total}_i = \text{taxable\_amount}_i + \text{allocated\_tax}_i$$
-   - **Tax-Inclusive (`is_tax_inclusive = true`, $r_i > 0$)**:
-     $$\text{line\_total}_i = \text{line\_discounted}_i, \quad \text{taxable\_amount}_i = \text{ROUND}\left(\frac{\text{line\_total}_i}{1 + r_i / 100},\; \text{decimals}\right), \quad \text{allocated\_tax}_i = \text{line\_total}_i - \text{taxable\_amount}_i$$
+   - Let effective invoice rate $r = 0.0000$ if `invoice.is_tax_exempt = true` OR `invoice.tax_rate = 0.0000`, else `invoice.tax_rate`.
+   - **Non-Taxable Line (`line.is_taxable = false`)**: Regardless of `invoice.tax_rate`, `invoice.is_tax_inclusive`, or `invoice.is_tax_exempt`, $\text{taxable\_amount}_i = 0.0000$, $\text{allocated\_tax}_i = 0.0000$, and $\text{line\_total}_i = \text{line\_discounted}_i$ (included in invoice `subtotal` and `total_amount`, excluded from `taxable_amount`).
+   - **Taxable Line with Zero Effective Rate (`line.is_taxable = true` AND ($r = 0.0000$ OR $\text{line\_discounted}_i = 0.0000$))**: Both inclusive and exclusive tax modes produce $\text{taxable\_amount}_i = \text{line\_discounted}_i$, $\text{allocated\_tax}_i = 0.0000$, $\text{line\_total}_i = \text{line\_discounted}_i$.
+   - **Tax-Exclusive (`line.is_taxable = true`, `is_tax_inclusive = false`, $r > 0$)**:
+     $$\text{taxable\_amount}_i = \text{line\_discounted}_i, \quad \text{allocated\_tax}_i = \text{ROUND}(\text{taxable\_amount}_i \times (r / 100),\; \text{decimals}), \quad \text{line\_total}_i = \text{taxable\_amount}_i + \text{allocated\_tax}_i$$
+   - **Tax-Inclusive (`line.is_taxable = true`, `is_tax_inclusive = true`, $r > 0$)**:
+     $$\text{line\_total}_i = \text{line\_discounted}_i, \quad \text{taxable\_amount}_i = \text{ROUND}\left(\frac{\text{line\_total}_i}{1 + r / 100},\; \text{decimals}\right), \quad \text{allocated\_tax}_i = \text{line\_total}_i - \text{taxable\_amount}_i$$
    - **Invoice Header Totals & Line Reconciliation**:
      $$\text{taxable\_amount} = \sum_i \text{taxable\_amount}_i, \quad \text{tax\_amount} = \sum_i \text{allocated\_tax}_i, \quad \text{total\_amount} = \sum_i \text{line\_total}_i$$
      Because each line rounds independently using `ROUND(..., decimals)` and header totals are exact sums of persisted line columns, line items and header totals always reconcile identically with zero rounding discrepancy across multiple lines (matching Feature 005 POS arithmetic).
