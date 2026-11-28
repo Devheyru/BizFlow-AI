@@ -11,5 +11,5 @@ All AI agents and development assistants MUST adhere to the [BizFlow AI Constitu
 5. **AI Guardrails**: AI suggestions are untrusted. AI models MUST NEVER autonomously execute financial or inventory-mutating operations without human authorization.
 
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the active plan in [specs/005-customers-sales/plan.md](specs/005-customers-sales/plan.md).
+shell commands, and other important information, read the active plan in [specs/006-invoices-expenses/plan.md](specs/006-invoices-expenses/plan.md).
 <!-- SPECKIT END -->
