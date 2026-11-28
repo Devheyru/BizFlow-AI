@@ -32,7 +32,8 @@ Used identically by `create_invoice`, `update_invoice`, and `issue_invoice`:
      - Else if `i = v_last_pos_idx`: `alloc_disc_i = ROUND(GREATEST(0.0000, LEAST(line_net_i, v_inv_disc - v_running_disc)), decimals)`.
      - Else: `alloc_disc_i = ROUND((line_net_i / v_net_subtotal) * v_inv_disc, decimals)`; accumulate `v_running_disc`.
      - `line_discounted_i = GREATEST(0.0000, ROUND(line_net_i - alloc_disc_i, decimals))`
-     - If `NOT line_is_taxable` OR `v_eff_rate = 0.0000`: `taxable_i = line_discounted_i`, `tax_i = 0.0000`, `total_i = line_discounted_i`.
+     - If `NOT line_is_taxable`: `taxable_i = 0.0000`, `tax_i = 0.0000`, `total_i = line_discounted_i`.
+     - Else if `v_eff_rate = 0.0000` OR `line_discounted_i = 0.0000`: `taxable_i = line_discounted_i`, `tax_i = 0.0000`, `total_i = line_discounted_i`.
      - Else if `v_is_tax_inclusive`: `taxable_i = ROUND(line_discounted_i / (1.0 + v_eff_rate / 100.0), decimals)`, `tax_i = ROUND(line_discounted_i - taxable_i, decimals)`, `total_i = line_discounted_i`.
      - Else (exclusive): `taxable_i = line_discounted_i`, `tax_i = ROUND(line_discounted_i * (v_eff_rate / 100.0), decimals)`, `total_i = ROUND(line_discounted_i + tax_i, decimals)`.
 6. Sum line outputs strictly (`v_taxable = SUM(taxable_i)`, `v_tax = SUM(tax_i)`, `v_total = SUM(total_i)`).
@@ -79,7 +80,7 @@ For every RPC taking `p_idempotency_key`:
 ### 3.4 `public.issue_invoice`
 - **Signature**: `(p_org_id UUID, p_invoice_id UUID, p_idempotency_key UUID) RETURNS JSONB`
 - **Permission**: `invoices:issue`
-- **Locks & Checks**: Advisory lock `(p_org_id, p_idempotency_key)` + Precedence C/A/B/D; locks `invoices ... FOR UPDATE`; verifies `status = 'draft'` (`P0072`), `>= 1` item (`P0073 INVOICE_EMPTY_ITEMS`), active customer (`P0041`), any linked `product_id` has `status = 'active'` and `is_active = true` (`P0086 PRODUCT_UNAVAILABLE_FOR_INVOICE`).
+- **Locks & Checks**: Advisory lock `(p_org_id, p_idempotency_key)` + Precedence C/A/B/D; locks `invoices ... FOR UPDATE`; verifies `status = 'draft'` (`P0072`), `>= 1` item (`P0073 INVOICE_EMPTY_ITEMS`), active customer (`P0041`), any linked `product_id` has `status = 'active'` (`P0086 PRODUCT_UNAVAILABLE_FOR_INVOICE`).
 - **Effects**:
   - Snapshots live `organization_tax_settings` and active `customers` (`name`, `email`, `phone`) cleanly.
   - Recomputes authoritative totals under locked tax snapshot.
